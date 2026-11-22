@@ -53,6 +53,23 @@ python3 -m frsbot.tools.build_viewer
 python3 -m pytest -q
 ```
 
+## Real-engine offline backend
+
+`frsbot.sim.wasm_env.WasmEnv` uses the game's real Rust/WASM physics, FUEL, intake, shooting and match rules
+in a local Node process; the older drive/push models remain approximation/baseline tools. Node is found on
+PATH or under `~/.nvm/versions/node`. Download public assets with curl once; game files are gitignored under
+`data/engine/` and must never be committed. See `docs/ARCHITECTURE.md` for the API and JSON-lines protocol.
+
+```
+python3 -m frsbot.sim.engine.fetch
+python3 -m pytest -q tests/test_engine_fetch.py tests/test_wasm_env.py
+python3 -m frsbot.tools.benchmark_engine
+```
+
+Use `with WasmEnv() as env`, `env.reset(team, alliance="blue", start={"fx":0,"fy":0,"headingDeg":0}, seed=1)`,
+and `env.step(Inputs(...), ticks=60)`. Observations match replay world coordinates; `env.view` retains the
+full raw engine view (including score, gates, all FUEL arrays and hub state). Inputs are held for each 60 Hz tick.
+
 ## Next steps
 
 1. Decode the FUEL section of replay frames (504 balls per run) into per-sample positions.

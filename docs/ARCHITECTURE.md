@@ -43,6 +43,40 @@ tests/         pytest: codec round-trips, Inputs encode/decode, Env determinism,
 
 Dependency direction: `core` <- `replay`, `sim`, `bot`, `live`; `bot` never imports `sim`, `replay` or `live`.
 
+## Real-engine offline backend
+
+`frsbot.sim.wasm_env.WasmEnv` runs the game's actual Rust/WASM match physics in Node, not the approximate
+drive/push models. Download the public worker chunks and WASM once with `python3 -m frsbot.sim.engine.fetch`
+(requires curl). Asset URLs are discovered from the live page and worker factory; assets and their manifest
+live in gitignored `data/engine/`. No game code is committed. Changed bundling/constructor signatures fail
+explicitly rather than silently falling back to approximate physics. Node is found on PATH or under `~/.nvm`.
+
+```python
+from frsbot.core.inputs import Inputs
+from frsbot.sim.wasm_env import WasmEnv
+
+with WasmEnv() as env:
+    state = env.reset(2910, alliance="blue", start={"fx": 0, "fy": 0, "headingDeg": 0}, seed=1)
+    state = env.step(Inputs(y=1, field_relative=True), ticks=60)
+    full_view = env.view  # score, gates, all FUEL arrays, hubs, drivers, etc.
+```
+
+Reset accepts `auto="none"`, `event="event"`, `hp=True`, `unload=True`, `freeplay=False`, and `countdown=False`.
+Start uses the game's field fx/fy coordinates (the game may clamp the requested pose); observations use replay
+world x/z meters, velocities in m/s, and `a = pi - 2*atan2(quat_y, quat_w)`. Time is seconds from auto start,
+including negative countdown time. Freeplay preserves the engine's phase and has no hub toggles.
+Every step advances exactly `ticks` 1/60-second ticks, holding the input constant, and returns the last state.
+`RobotState.capacity` is the engine view's `hopperCapacity`; it is not the UI's hopper-plus-feed capacity.
+
+`frsbot/sim/engine/server.mjs [data/engine]` also accepts one JSON object per line: `new` with a `config` object,
+`start` (optional `countdown`), `step` (`inputs` keyed by robot id, `n` ticks), `state`, and `close`.
+Each response is `{ok:true, view, engine, build}` (close omits view), or `{ok:false, error}`. Typed arrays are
+serialized as ordinary flat JSON arrays. Diagnostics go to stderr; after fetching, simulation makes no network calls.
+Use a context manager or `close()` to release the child process.
+
+Checks: `python3 -m pytest -q tests/test_engine_fetch.py tests/test_wasm_env.py` (engine tests skip without
+downloaded assets); traces/throughput: `python3 -m frsbot.tools.benchmark_engine`.
+
 ## Core types
 
 - `Inputs`: `x, y, turn` in [-1, 1] and booleans `intake, score, outtake, field_relative, climb, block, stow, hood`.
