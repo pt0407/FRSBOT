@@ -70,6 +70,24 @@ Use `with WasmEnv() as env`, `env.reset(team, alliance="blue", start={"fx":0,"fy
 and `env.step(Inputs(...), ticks=60)`. Observations match replay world coordinates; `env.view` retains the
 full raw engine view (including score, gates, all FUEL arrays and hub state). Inputs are held for each 60 Hz tick.
 
+## ImAI bot and evaluation
+
+`frsbot.bot.imai.ImAI(spec).act(state)` consumes only core observations. The planner chooses Collect/Score/Stage
+every 0.5 s or on completion/invalidation; the driver uses field-relative pursuit, braking and bump crossings.
+`RobotState.gate` and `mode` are optional observations; replay conversion leaves them unknown (`None`).
+
+```
+python3 -m frsbot.tools.evaluate
+python3 -m frsbot.tools.build_viewer
+python3 -m pytest -q tests/test_bot.py tests/test_evaluate.py
+```
+
+Evaluation defaults to teams 254, 2910, 1114, 4414 and 60026, both alliances, seeds 1–3, 166 s, no auto,
+site-default HP throws/unloads enabled. It uses three workers and a 20 Hz control loop (`--ticks 1` for 60 Hz).
+Generated traces and the summary live in gitignored `data/sim/imai/`; the viewer builder includes these sim runs.
+Blocked gates count overlapping command-ticks, with estimated blocked fire opportunities in the summary, not
+actual lost shots. Human-player points are included in match totals; isolated bot smoke tests disable HP.
+
 ## Next steps
 
 1. Decode the FUEL section of replay frames (504 balls per run) into per-sample positions.

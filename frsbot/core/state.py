@@ -31,6 +31,8 @@ class RobotState:
     vz: float
     hopper: int
     capacity: int
+    gate: dict[str, bool] | None = None
+    mode: str | None = None
 
 
 @dataclass

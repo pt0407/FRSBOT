@@ -1,0 +1,132 @@
+"""Window-aware collection, scoring and staging goals."""
+import math
+from dataclasses import dataclass
+
+import numpy as np
+
+from frsbot.core.field import HUB_CENTRES
+from frsbot.core.specs import RobotSpec
+from frsbot.core.state import GameState, Phase
+
+FIELD_X, FIELD_Z = 8.270494, 4.034663
+SCORING_X = 4.3  # Own-zone line is |x|=4.2418 m; keep the centre 58 mm inside it.
+
+
+def angle_error(target, actual):
+    return (target - actual + math.pi) % (2 * math.pi) - math.pi
+
+
+@dataclass(frozen=True)
+class Goal:
+    kind: str
+    point: tuple[float, float]
+
+
+class Planner:
+    def __init__(self, spec: RobotSpec):
+        self.spec = spec
+        self.goal = None
+
+    def capacity(self, state):
+        # hopperFuel/hopperCapacity are storage counts, not the UI's feed-inclusive count.
+        return state.robots[state.me].capacity or self.spec.total_capacity
+
+    def bounds(self):
+        return self.spec.min_range or min(self.spec.hub_shot["distance"]), self.spec.max_range or max(self.spec.hub_shot["distance"])
+
+    def hub(self, state):
+        return HUB_CENTRES[state.robots[state.me].alliance][:2]
+
+    def score_spot(self, state):
+        robot = state.robots[state.me]
+        cx, cz = self.hub(state)
+        low, high = self.bounds()
+        radius = max(low + .3, min(high - .5, (low + high) / 2))
+        heading = math.atan2(robot.z - cz, robot.x - cx)
+        margin = math.hypot(self.spec.bumper_length, self.spec.bumper_width) / 2 + .1
+        candidates = []
+        for delta in [0, *[s * i * math.pi / 36 for i in range(1, 37) for s in (-1, 1)]]:
+            x, z = cx + radius * math.cos(heading + delta), cz + radius * math.sin(heading + delta)
+            own_side = x < -SCORING_X if robot.alliance == "blue" else x > SCORING_X
+            if own_side and abs(x) <= FIELD_X - margin and abs(z) <= FIELD_Z - margin:
+                candidates.append((x, z))
+        return min(candidates, key=lambda p: math.hypot(p[0] - robot.x, p[1] - robot.z))
+
+    def fuel_points(self, state):
+        pos = state.fuel.pos
+        return pos[(state.fuel.where == 0) & (pos[:, 1] < .2)][:, [0, 2]]
+
+    def clusters(self, state):
+        points = self.fuel_points(state)
+        if not len(points):
+            return []
+        robot = state.robots[state.me]
+        cells, inverse = np.unique(np.floor(points / .5).astype(int), axis=0, return_inverse=True)
+        counts = np.bincount(inverse)
+        centres = np.column_stack([np.bincount(inverse, weights=points[:, i]) / counts for i in (0, 1)])
+        sweep = max(.6, self.spec.bumper_width * .8)
+        balls = (np.sum((centres[:, None, :] - points[None, :, :]) ** 2, axis=2) <= sweep ** 2).sum(axis=1)
+        dx, dz = centres[:, 0] - robot.x, centres[:, 1] - robot.z
+        travel = np.hypot(dx, dz) / self.spec.max_speed
+        turn = np.abs((np.arctan2(dz, dx) - robot.a + np.pi) % (2 * np.pi) - np.pi) / self.spec.turn_rate
+        values = balls / (travel + turn + .5)
+        own = self.score_spot(state)
+        if state.hubs[robot.alliance].active:
+            values /= 1 + .08 * np.hypot(centres[:, 0] - own[0], centres[:, 1] - own[1])
+        margin = math.hypot(self.spec.bumper_length, self.spec.bumper_width) / 2 + .1
+        result = []
+        for point, value in zip(centres, values):
+            x, z = map(float, point)
+            if abs(x) > FIELD_X - margin or abs(z) > FIELD_Z - margin:
+                continue
+            clearance = min(FIELD_X - abs(x), FIELD_Z - abs(z))
+            value /= 1 + .15 / max(.1, clearance)
+            if any(abs(x - cx) < 1.3 and abs(z - cz) < 1.3 for cx, cz, _ in HUB_CENTRES.values()):
+                continue
+            if any(math.hypot(x - cx, z - cz) < 2 for cx, cz, _ in HUB_CENTRES.values()):
+                value *= .8
+            if self.goal and self.goal.kind == "Collect" and math.hypot(x - self.goal.point[0], z - self.goal.point[1]) < .8:
+                value *= 1.25
+            result.append((value, (x, z)))
+        return sorted(result, reverse=True)
+
+    def valid(self, goal, state):
+        if goal is None:
+            return False
+        robot = state.robots[state.me]
+        if goal.kind == "Collect":
+            points = self.fuel_points(state)
+            return robot.hopper < self.capacity(state) and bool(len(points) and np.any(np.linalg.norm(points - goal.point, axis=1) < .85))
+        if goal.kind == "Score":
+            return robot.hopper > 0 and state.hubs[robot.alliance].active
+        return robot.hopper > 0 and not state.hubs[robot.alliance].active
+
+    def plan(self, state: GameState) -> Goal:
+        robot = state.robots[state.me]
+        hub = state.hubs[robot.alliance]
+        spot = self.score_spot(state)
+        if state.phase in (Phase.COUNTDOWN, Phase.SETTLE, Phase.DONE):
+            return Goal("Stage", (robot.x, robot.z))
+        low, high = self.bounds()
+        distance = math.hypot(robot.x - self.hub(state)[0], robot.z - self.hub(state)[1])
+        if state.t >= 160:
+            own_side = robot.x < -SCORING_X if robot.alliance == "blue" else robot.x > SCORING_X
+            return Goal("Score", (robot.x, robot.z)) if robot.hopper and hub.active and own_side and low <= distance <= high else Goal("Stage", (robot.x, robot.z))
+        clusters = self.clusters(state)
+        score_time = math.hypot(spot[0] - robot.x, spot[1] - robot.z) / self.spec.max_speed + robot.hopper / self.spec.fire_rate
+        if hub.active and robot.hopper and (hub.seconds_to_toggle <= score_time + 1 or
+                robot.hopper >= .85 * self.capacity(state) or not clusters or clusters[0][0] < 2):
+            goal = Goal("Score", spot)
+        elif not hub.active and robot.hopper and (robot.hopper >= .95 * self.capacity(state) or hub.seconds_to_toggle < score_time):
+            goal = Goal("Stage", spot)
+        elif clusters:
+            goal = Goal("Collect", clusters[0][1])
+        else:
+            goal = Goal("Stage", spot if robot.hopper else (robot.x, robot.z))
+        if self.goal and self.goal.kind == "Stage" and robot.hopper and hub.active:
+            goal = Goal("Score", spot)
+        # Finish unloading instead of changing targets as soon as one ball leaves.
+        if self.goal and self.goal.kind == "Score" and self.valid(self.goal, state):
+            goal = self.goal
+        self.goal = goal
+        return goal

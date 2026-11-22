@@ -44,6 +44,7 @@ def view_to_state(view: dict, freeplay: bool = False) -> GameState:
             a=math.pi - 2 * math.atan2(quat[1], quat[3]),
             vx=raw["vel"][0], vz=raw["vel"][2],
             hopper=raw["hopperFuel"], capacity=raw["hopperCapacity"],
+            gate=raw.get("gate"), mode=raw.get("state"),
         ))
     fuel = view["fuel"]
     pos = np.asarray(fuel["pos"], dtype=np.float32).reshape(fuel["count"], 3)

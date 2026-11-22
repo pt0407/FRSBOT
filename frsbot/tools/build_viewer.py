@@ -20,19 +20,24 @@ def compact(path: Path):
     d = json.loads(path.read_text())
     r0 = d["robots"][0]
     lb = d.get("leaderboard", {})
+    score = (d.get("score") or {}).get(r0["alliance"])
+    if isinstance(score, dict):
+        score = score["total"]
     samples = []
     for s in d["samples"]:
         p = s["robots"][0]
         samples.append([s["tick"], p["pos"][0], p["pos"][2], round(yaw(p["quat"]), 3), p["vel"][0], p["vel"][2], p.get("hopperFuel")])
     return {
         "id": d["id"], "name": r0["name"], "team": r0["team"], "alliance": r0["alliance"],
-        "kind": d["kind"], "score": (d.get("score") or {}).get(r0["alliance"]),
+        "kind": d["kind"], "score": score,
         "durationMs": d["durationMs"], "board": lb.get("points"), "samples": samples,
     }
 
 
 def main():
-    runs = [compact(p) for p in sorted(TEL.glob("*.json")) + sorted((ROOT / "data" / "sim").glob("*.json"))]
+    sim = ROOT / "data" / "sim"
+    runs = [compact(p) for p in sorted(TEL.glob("*.json")) + sorted(sim.glob("*.json"))
+            + sorted((sim / "imai").glob("imai-*.json"))]
     runs.sort(key=lambda r: -(r["board"] or 0))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("window.REPLAYS = " + json.dumps(runs, separators=(",", ":")) + ";\n")

@@ -128,6 +128,20 @@ Rules, first match wins:
 
 ## Evaluation
 
-`python -m frsbot.tools.evaluate` runs Bot and baseline on every robot spec for 5 seeds and prints mean score,
-FUEL scored, FUEL scored while inactive (wasted), and hopper overflow. A change to the bot lands only if it
-doesn't lower mean score.
+Implemented backend-independent entry point: `ImAI(spec).act(GameState) -> Inputs`. Optional robot `gate`
+flags (`True` means blocked, except `open`) and `mode` are filled by WASM and left `None` by replays.
+An HP-disabled scoring experiment on both alliances verifies blue scores into x≈−3.645 and red into x≈+3.645.
+Native brains pass from outside the own-alliance zone; valid score spots are constrained to that zone and the
+field boundary as well as the specified range circle. The shooter faces opposite the intake. Barrier routes
+use the bump lanes instead of trenches, which are not traversable by every robot in every orientation.
+
+`python3 -m frsbot.tools.evaluate` runs the real engine for teams 254/2910/1114/4414/60026, both alliances,
+seeds 1/2/3, no auto, event rules and default HP throws/unloads. Default control is 20 Hz (3 physics ticks),
+with `--ticks 1` available for 60 Hz; `--jobs` controls parallel matches. Per-run viewer-compatible traces,
+goal times, gate diagnostics and leaderboard comparisons are in gitignored `data/sim/imai/`.
+`python3 -m frsbot.tools.build_viewer` includes them. Gate durations and rate-based blocked fire opportunities
+overlap across reasons and are not actual lost-shot counts. Scores include human-player contributions.
+Leaderboard comparisons exclude driver 404; no-auto runs are not like-for-like comparisons with leaderboard autos.
+
+Longer-term evaluation target: compare Bot and baseline on every robot spec for 5 seeds, reporting mean score,
+FUEL scored, FUEL scored while inactive (wasted), and hopper overflow. A change to the bot should not lower mean score.
