@@ -6,11 +6,13 @@ from pathlib import Path
 
 import numpy as np
 
-from frsbot.analysis.matches import ALLIANCE_ZONE_EDGE, DEFEND_DISTANCE, INTENT_LABELS
 from frsbot.core.field import HUB_CENTRES
 from frsbot.core.specs import load_specs
 
 
+ALLIANCE_ZONE_EDGE = 4.2418
+DEFEND_DISTANCE = 1.5
+INTENT_LABELS = ("Collect", "Score", "Feed", "Defend", "Idle")
 MODEL_PATH = Path(__file__).resolve().parents[2] / "data" / "intent_model.json"
 FEATURES = ("own_hub_dx", "own_hub_dz", "opponent_hub_dx", "opponent_hub_dz",
             "in_own_zone", "in_opponent_half", "vx", "vz", "speed", "toward_own_hub",
