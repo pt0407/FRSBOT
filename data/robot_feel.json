@@ -1,0 +1,222 @@
+[
+ {
+  "team": 1114,
+  "robotName": "Simbot Tim",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.02,
+  "turnRate": 9.98,
+  "accel": 8.0,
+  "offset": 132286,
+  "hopperCapacity": 80,
+  "_gap": 1218
+ },
+ {
+  "team": 1323,
+  "robotName": "1323",
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.9,
+  "turnRate": 10.5,
+  "accel": 11.0,
+  "offset": 157140,
+  "hopperCapacity": 80,
+  "_gap": 2449
+ },
+ {
+  "team": 1360,
+  "robotName": "Andromeda",
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.95,
+  "turnRate": 10.5,
+  "accel": 9.5,
+  "offset": 216601,
+  "hopperCapacity": 38,
+  "_gap": 1834
+ },
+ {
+  "team": 1678,
+  "robotName": "Limestone",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.4,
+  "turnRate": 11.35,
+  "accel": 9.5,
+  "offset": 288713,
+  "hopperCapacity": 77,
+  "_gap": 1391
+ },
+ {
+  "team": 1690,
+  "robotName": "KEPLER",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.4,
+  "turnRate": 11.0,
+  "accel": 10.0,
+  "offset": 419197,
+  "hopperCapacity": 47,
+  "_gap": 1214
+ },
+ {
+  "team": null,
+  "robotName": null,
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.39,
+  "turnRate": 9.42,
+  "accel": 9.5,
+  "offset": 506043,
+  "hopperCapacity": 56,
+  "_gap": 1976
+ },
+ {
+  "team": 1706,
+  "robotName": "Mirage",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.5,
+  "turnRate": 10.5,
+  "accel": 9.0,
+  "offset": 572015,
+  "hopperCapacity": 55,
+  "_gap": 1764
+ },
+ {
+  "team": 254,
+  "robotName": "Overload",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.4,
+  "turnRate": 11.0,
+  "accel": 10.0,
+  "offset": 676907,
+  "hopperCapacity": 72,
+  "_gap": 1161
+ },
+ {
+  "team": null,
+  "robotName": "Desperate Measures",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.5,
+  "turnRate": 11.0,
+  "accel": 10.0,
+  "offset": 766869,
+  "hopperCapacity": 62,
+  "_gap": 1333
+ },
+ {
+  "team": 2481,
+  "robotName": "Clyde",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.3,
+  "turnRate": 10.5,
+  "accel": 12.0,
+  "offset": 788917,
+  "hopperCapacity": 115,
+  "_gap": 1355
+ },
+ {
+  "team": 6329,
+  "robotName": "Roman II",
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.3,
+  "turnRate": 9.0,
+  "accel": 8.0,
+  "offset": 852135,
+  "hopperCapacity": 70,
+  "_gap": 1156
+ },
+ {
+  "team": 5,
+  "robotName": "Icarus 2.0",
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.5,
+  "turnRate": 10.5,
+  "accel": 10.0,
+  "offset": 948303,
+  "hopperCapacity": 60,
+  "_gap": 1501
+ },
+ {
+  "team": null,
+  "robotName": "Re\u2022Blitz",
+  "driveMotor": null,
+  "maxSpeed": 5.1,
+  "turnRate": 11.2,
+  "accel": 10.0,
+  "offset": 1034968,
+  "hopperCapacity": 47,
+  "_gap": 1372
+ },
+ {
+  "team": 4414,
+  "robotName": "RIPCURRENT",
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.3,
+  "turnRate": 10.5,
+  "accel": 12.0,
+  "offset": 1061096,
+  "hopperCapacity": 115,
+  "_gap": 1451
+ },
+ {
+  "team": 4946,
+  "robotName": "MOTO MOTO",
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.39,
+  "turnRate": 10.5,
+  "accel": 11.0,
+  "offset": 1086309,
+  "hopperCapacity": 100,
+  "_gap": 1380
+ },
+ {
+  "team": 60026,
+  "robotName": "Competitive Concept",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.4,
+  "turnRate": 10.5,
+  "accel": 10.0,
+  "offset": 1152040,
+  "hopperCapacity": 35,
+  "_gap": 1459
+ },
+ {
+  "team": 7558,
+  "robotName": "Vanguard",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.5,
+  "turnRate": 10.8,
+  "accel": 9.0,
+  "offset": 1213856,
+  "hopperCapacity": 59,
+  "_gap": 1035
+ },
+ {
+  "team": null,
+  "robotName": "CHUNK",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.39,
+  "turnRate": 10.5,
+  "accel": 9.0,
+  "offset": 1258898,
+  "hopperCapacity": 70,
+  "_gap": 1057
+ },
+ {
+  "team": 971,
+  "robotName": "Mixtape",
+  "driveMotor": "krakenX60Foc",
+  "maxSpeed": 4.4,
+  "turnRate": 10.5,
+  "accel": 9.0,
+  "offset": 1347972,
+  "hopperCapacity": 55,
+  "_gap": 1354
+ },
+ {
+  "team": null,
+  "robotName": null,
+  "driveMotor": "krakenX60",
+  "maxSpeed": 4.9,
+  "turnRate": 10.5,
+  "accel": 11.0,
+  "offset": 1425622,
+  "hopperCapacity": 60,
+  "_gap": 1556
+ }
+]
