@@ -29,14 +29,34 @@ class RobotSpec(Feel):
     frame_width: float  # m
     bumper_length: float  # m
     bumper_width: float  # m
+    brain_kind: str
+    min_range: float | None  # m; None when the brain has no equivalent bound
+    max_range: float | None
+    heading_tolerance_deg: float | None
+    max_shot_speed: float | None  # m/s
+    hub_shot: dict[str, list[float]]
+    fire_rate: float  # balls/s
+    intake_rate: float  # balls/s
+    hopper_storage_capacity: int
+    total_capacity: int  # hopper plus feed lanes
+    autos: list[str]
+    brain_equivalents: dict
 
     @classmethod
     def from_spec(cls, spec: dict):
+        brain = spec["brain"]
+        equivalents = spec.get("brainEquivalents", {})
+        shooting = {**equivalents, **brain}
         return cls(
             max_speed=spec["maxSpeed"], turn_rate=spec["turnRate"], accel=spec["accel"],
             hopper_capacity=spec["hopperCapacity"], team=spec["team"], robot_name=spec["robotName"],
             drive_motor=spec["driveMotor"], frame_length=spec["frameLength"], frame_width=spec["frameWidth"],
             bumper_length=spec["bumperLength"], bumper_width=spec["bumperWidth"],
+            brain_kind=brain["kind"], min_range=shooting.get("minRange"), max_range=shooting.get("maxRange"),
+            heading_tolerance_deg=shooting.get("headingToleranceDeg"), max_shot_speed=shooting.get("maxShotSpeed"),
+            hub_shot=shooting.get("hubShot", {}), fire_rate=spec["fireRate"], intake_rate=spec["intakeRate"],
+            hopper_storage_capacity=spec["hopperStorageCapacity"],
+            total_capacity=spec["totalCapacity"], autos=brain["autos"], brain_equivalents=equivalents,
         )
 
 
