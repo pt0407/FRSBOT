@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -6,8 +7,10 @@ import pytest
 from frsbot.core.inputs import Inputs
 from frsbot.core.specs import load_specs
 from frsbot.core.state import FuelState, GameState, HubState, Phase, RobotState
+from frsbot.imitation.contacts import FIELD, FUEL, ROBOT, contact_flags
 from frsbot.imitation.dataset import examples
 from frsbot.imitation.labels import label_segments
+from frsbot.imitation.ownership import carried_owners
 from frsbot.imitation.recover import excluded, windows, write_run
 from frsbot.imitation.report import summarize
 from frsbot.sim.engine.fetch import ENGINE_DIR
@@ -53,6 +56,26 @@ def test_segments_preserve_tick_duration_and_drop_capture_gaps():
     assert [ticks[i] for i in segment] == list(range(0, 121, 6))
 
 
+def test_carried_owner_uses_intake_event_until_ball_leaves():
+    start = state(0, 1, [[0., .5, 0.], [0., .5, 0.]], [2, 2])
+    start = replace(start, robots=[start.robots[0], replace(start.robots[0], id=55, x=4)])
+    ground = replace(start, fuel=replace(start.fuel, where=np.array([0, 2])))
+    snapshots = [start, start, ground, *([ground] * 6), start]
+    owners = carried_owners(snapshots, [[0, {"t": "intake", "robot": 55, "fuel": 0}]], {0, 2, 9})
+    assert owners == {0: [1, 0], 2: [-1, 0], 9: [0, 0]}
+
+
+def test_contact_proxies_detect_robot_wall_hub_and_fuel_stall():
+    start = state(0, 0, [[0., .08, 0.], [.1, .08, 0.], [0., .08, .1]], [0, 0, 0])
+    robot = start.robots[0]
+    assert contact_flags([start], SPECS) == [0]
+    assert contact_flags([replace(start, robots=[replace(robot, vx=2)]), start], SPECS) == [FUEL]
+    for x in (8., 3.645):
+        assert contact_flags([replace(start, robots=[replace(robot, x=x)])], SPECS) == [FIELD]
+    duel = replace(start, robots=[robot, replace(robot, id=55, x=.8)])
+    assert contact_flags([duel], SPECS) == [ROBOT, ROBOT]
+
+
 def test_dataset_round_trip_and_segment_endpoint_metrics(tmp_path):
     states = [state(-6, 2, [[-6, .6, 0]], [2], i / 60) for i in (0, 2, 120)]
     goal = label_segments(states, SPECS)
@@ -76,6 +99,42 @@ def test_dataset_round_trip_and_segment_endpoint_metrics(tmp_path):
     assert metrics["median_cm"] == pytest.approx(5)
     assert (metrics["initial_hopper"], metrics["hopper"], metrics["fuel"]) == (1., 1., .75)
     assert metrics["labels"] == {"Stage": 1}
+
+
+def test_report_excludes_whole_contact_segments(tmp_path):
+    path = tmp_path / "run.npz"
+    residual = np.zeros((2, 2, 6))
+    residual[:, :, 0] = [[.01, .03], [.4, .2]]
+    np.savez(path, segment=[0, 1], source="multiplayer", residual=residual, contacts=[[0, 0], [FIELD, 0]],
+             goal_kind=[["Stage", "Stage"]] * 2, initial_hopper=[[0, 0]] * 2, hopper=[[0, 0]] * 2, flagged=[])
+    metrics = summarize([path])["all"]
+    assert metrics["contact_free_count"] == 2
+    assert metrics["contact_free_pose"] == pytest.approx([2, 2.8])
+    assert metrics["causes"]["Wall/hub"] == (1, 1, 40.)
+    assert metrics["causes"]["No detected contact"] == pytest.approx((3, 1, 16.6))
+
+
+@pytest.mark.skipif(not (ENGINE_DIR / "manifest.json").exists(), reason="requires real engine assets")
+def test_primes_recorded_fuel_without_preload():
+    start = dict(fx=0, fy=0, headingDeg=0)
+    spec = SPECS[254]
+    with WasmEnv() as env:
+        env.reset(254, start=start, seed=12, hp=False, unload=False, freeplay=True)
+        robot = env.view["robots"][0]
+        fuel = {k: env.view["fuel"][k] for k in ("pos", "where")}
+        body = {k: robot[k] for k in ("pos", "quat", "vel")}
+        owners = [-1] * len(fuel["where"])
+        for i in range(12):
+            fuel["where"][i] = 2
+            owners[i] = 0
+        frames = [dict(tick=tick, bodies=[dict(body, hopper=10, omega=0)], fuel=fuel,
+                       buttons=[[False, False]]) for tick in (0, 2)]
+        env._request("new", config=dict(team=254, recovery=True))
+        result = env._request("recover", segment=dict(
+            robots=[dict(id=0, team=254, alliance="blue", start=start, speed=spec.max_speed, turnRate=spec.turn_rate)],
+            seed=12, frames=frames, initialFuel=dict(fuel, vel=[0.] * len(fuel["pos"]), owners=owners)))
+    assert result["initialHoppers"] == [10]
+    assert result["residuals"][-1][0][3] == 0
 
 
 @pytest.mark.skipif(not (ENGINE_DIR / "manifest.json").exists(), reason="requires real engine assets")

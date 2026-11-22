@@ -5,27 +5,27 @@ const heading = q => Math.PI - 2 * Math.atan2(q[1], q[3]);
 const stick = v => v ? Math.sign(v) * (.12 + .88 * Math.min(Math.abs(v), 1)) : 0;
 
 class ReplayMatch {
-  constructor(adapter, segment, preloads) {
+  constructor(adapter, segment) {
     this.engine = adapter.engine;
     this.x = this.engine.exports;
-    const teams = [...new Set(segment.robots.map(r => r.team))].map(adapter.teamByNumber);
+    const teams = new Map(segment.robots.map(r => [r.team, adapter.teamByNumber(r.team)]));
     const robots = segment.robots.map((r, i) => ({
       id: r.id, team: r.team, alliance: r.alliance, start: r.start,
-      preload: preloads[i], local: i === 0,
+      preload: 0, local: i === 0,
     }));
     const config = {
       robots, seed: segment.seed, auto: 'none', event: 'event', solo: robots.length === 1,
       hpThrows: false, hpUnloads: false, freeplay: true, fuelCount: segment.initialFuel.where.length,
-      rules: { preload: 'full', mode: 'freeplay' },
+      rules: { preload: 0, mode: 'freeplay' },
     };
-    this.p = this.engine.withText([JSON.stringify(teams), JSON.stringify(config)], (ptr, len) =>
+    this.p = this.engine.withText([JSON.stringify([...teams.values()]), JSON.stringify(config)], (ptr, len) =>
       this.x.fo_new(this.engine.matchData(), ptr[0], len[0], ptr[1], len[1]));
     if (!this.p) throw new Error(this.engine.error());
     this.at = this.x.fx_alloc(112);
     this.robots = robots.length;
     try {
       this.check(this.x.fs_start(this.p, 0));
-      this.restore(segment);
+      this.restore(segment, robots.map(r => teams.get(r.team).intake));
     } catch (error) {
       this.close();
       throw new Error(`reset: ${error.message}`, { cause: error });
@@ -37,47 +37,60 @@ class ReplayMatch {
     return status;
   }
 
-  restore(segment) {
-    const before = this.bodies();
-    const { pos, vel, where } = segment.initialFuel;
-    const staged = this.view(where.length);
-    this.indices = Array.from(where.keys());
-    const available = new Set(this.indices.filter(i => where[i] === 2));
-    for (let i = 0; i < where.length; i++) {
-      if (staged.where[i] !== 2) continue;
-      const j = i * 3;
-      const robot = before.map(r => Math.hypot(staged.pos[j] - r.pos[0], staged.pos[j + 2] - r.pos[2]))
-        .reduce((best, dist, index, all) => dist < all[best] ? index : best, 0);
-      const { pos: centre } = segment.frames[0].bodies[robot];
-      let nearest = -1, distance = 1.3;
-      if (available.has(i) && Math.hypot(pos[j] - centre[0], pos[j + 2] - centre[2]) < distance) {
-        nearest = i;
-      } else {
-        for (const index of available) {
-          const d = Math.hypot(pos[index * 3] - centre[0], pos[index * 3 + 2] - centre[2]);
-          if (d < distance) [nearest, distance] = [index, d];
-        }
-      }
-      if (nearest >= 0) {
-        const current = this.indices.indexOf(nearest);
-        [this.indices[i], this.indices[current]] = [nearest, this.indices[i]];
-        available.delete(nearest);
-      }
+  setBody(i, { pos, quat, vel, omega }) {
+    [pos, quat, vel, [0, omega, 0]].forEach((v, k) =>
+      this.check(this.x.fo_body_set(this.p, i, k, v[0], v[1], v[2], v[3] ?? 0)));
+  }
+
+  setBall(i, mode, a, b, c, wake = true) {
+    this.check(this.x.fo_ball_set(this.p, i, mode, a, b, c, +wake));
+  }
+
+  inside(i) {
+    const n = this.check(this.x.fo_inside(this.p, i));
+    return new Set(new Uint16Array(this.x.memory.buffer, this.x.fo_inside_at(this.p, i), n));
+  }
+
+  primeCarried(owners, intakes) {
+    const queues = intakes.map((_intake, i) => owners.flatMap((owner, id) => owner === i ? [id] : []));
+    if (!queues.some(q => q.length)) return new Set();
+    const pads = intakes.map((_intake, i) => [-6 + 6 * (i % 3), 0, i < 3 ? -2.6 : 2.6]);
+    pads.forEach((pos, i) => this.setBody(i, { pos, quat: [0, 0, 0, 1], vel: [0, 0, 0], omega: 0 }));
+    const commands = queues.map(q => [0, 0, 0, Boolean(q.length), false]);
+    const budget = Math.max(...queues.map((q, i) => Math.ceil(60 * q.length / intakes[i].rate))) + 45;
+    let held;
+    for (let tick = 0; tick < budget; tick += 3) {
+      held = queues.map((_q, i) => this.inside(i));
+      if (queues.every((q, i) => q.every(id => held[i].has(id)))) break;
+      queues.forEach((q, i) => {
+        const { zone } = intakes[i];
+        const [cx, , cz] = pads[i];
+        const offered = q.filter(id => !held[i].has(id)).slice(0, 3);
+        offered.forEach((id, lane) => {
+          this.check(this.x.fo_ball_on(this.p, id, 1));
+          this.setBall(id, 0, cx + (zone.x0 + zone.x1) / 2, .079, cz + (lane - 1) * zone.half * .65);
+          this.setBall(id, 1, 0, 0, 0);
+        });
+      });
+      this.step(commands, 3);
     }
-    segment.frames[0].bodies.forEach(({ pos, quat, vel, omega }, i) => {
-      [pos, quat, vel, [0, omega, 0]].forEach((v, k) =>
-        this.check(this.x.fo_body_set(this.p, i, k, v[0], v[1], v[2], v[3] ?? 0)));
-    });
+    return new Set(queues.flatMap((_q, i) => [...this.inside(i)]));
+  }
+
+  restore(segment, intakes) {
+    const { pos, vel, where, owners } = segment.initialFuel;
+    if (owners?.some(owner => owner >= 0)) {
+      for (let i = 0; i < where.length; i++) this.check(this.x.fo_ball_on(this.p, i, 0));
+    }
+    const held = owners ? this.primeCarried(owners, intakes) : new Set();
+    segment.frames[0].bodies.forEach((body, i) => this.setBody(i, body));
     for (let i = 0; i < where.length; i++) {
-      // Engine-owned preload balls should stay attached to their robot.
-      if (staged.where[i] === 2) continue;
-      const index = this.indices[i];
-      const active = where[index] <= 1;
-      this.check(this.x.fo_ball_on(this.p, i, +active));
+      const active = where[i] <= 2;
+      if (!held.has(i)) this.check(this.x.fo_ball_on(this.p, i, +active));
       if (!active) continue;
-      const j = index * 3;
-      this.check(this.x.fo_ball_set(this.p, i, 0, pos[j], pos[j + 1], pos[j + 2], 1));
-      this.check(this.x.fo_ball_set(this.p, i, 1, vel[j], vel[j + 1], vel[j + 2], 1));
+      const j = i * 3;
+      this.setBall(i, 0, pos[j], pos[j + 1], pos[j + 2], !held.has(i));
+      this.setBall(i, 1, vel[j], vel[j + 1], vel[j + 2], !held.has(i));
     }
   }
 
@@ -127,34 +140,37 @@ function command(robot, body, from, to, dt, gain, buttons) {
   return [vz * scale, vx * scale, stick(-turnRate / robot.turnRate), ...buttons];
 }
 
-function fuelResidual(actual, expected, indices) {
+function fuelResidual(actual, expected) {
   let where = 0, match = 0;
-  for (let i = 0; i < indices.length; i++) {
-    const mapped = indices[i];
-    if (actual.where[i] !== expected.where[mapped]) continue;
+  for (let i = 0; i < expected.where.length; i++) {
+    if (actual.where[i] !== expected.where[i]) continue;
     where++;
-    const j = i * 3, k = mapped * 3;
-    if (Math.hypot(actual.pos[j] - expected.pos[k], actual.pos[j + 1] - expected.pos[k + 1],
-                  actual.pos[j + 2] - expected.pos[k + 2]) <= .1) match++;
+    const j = i * 3;
+    if (Math.hypot(actual.pos[j] - expected.pos[j], actual.pos[j + 1] - expected.pos[j + 1],
+                  actual.pos[j + 2] - expected.pos[j + 2]) <= .1) match++;
   }
   return [where / expected.where.length, match / expected.where.length];
 }
 
-function rollout(adapter, segment, preloads, gain, mode, fixed = null) {
-  const match = new ReplayMatch(adapter, segment, preloads);
+function rollout(adapter, segment, gain, mode, fixed = null) {
+  const match = new ReplayMatch(adapter, segment);
   try {
     const frames = segment.frames;
     const fuelCount = segment.initialFuel.where.length;
     const controls = [], residuals = [];
     let loss = 0;
-    const initialHoppers = match.view(fuelCount).hoppers;
+    let view = match.view(fuelCount);
+    const initialHoppers = view.hoppers;
     for (let k = 0; k < frames.length - 1; k++) {
       const a = frames[k], b = frames[k + 1];
       const ticks = b.tick - a.tick;
       const next = fixed?.[k] ?? match.bodies().map((body, i) => {
         const hint = a.buttons[i];
-        const buttons = [mode === 'intake' || mode !== 'drive' && hint[0],
-                         mode === 'hint' && hint[1]];
+        const buttons = mode === 'track' ? [
+          hint[0] && view.hoppers[i] <= b.bodies[i].hopper,
+          hint[1] && view.hoppers[i] >= b.bodies[i].hopper,
+        ] : [mode === 'intake' || mode !== 'drive' && hint[0],
+             mode === 'hint' && hint[1]];
         return command(segment.robots[i], body, a.bodies[i], b.bodies[i], ticks / 60, gain, buttons);
       });
       try {
@@ -162,8 +178,9 @@ function rollout(adapter, segment, preloads, gain, mode, fixed = null) {
       } catch (error) {
         throw new Error(`step at tick ${a.tick}: ${error.message}`, { cause: error });
       }
-      const bodies = match.bodies(), view = match.view(fuelCount);
-      const [fuelWhere, fuelMatch] = fuelResidual(view, b.fuel, match.indices);
+      const bodies = match.bodies();
+      view = match.view(fuelCount);
+      const [fuelWhere, fuelMatch] = fuelResidual(view, b.fuel);
       const interval = bodies.map(({ pos, quat, vel }, i) => {
         const want = b.bodies[i];
         const pose = Math.hypot(pos[0] - want.pos[0], pos[2] - want.pos[2]);
@@ -185,25 +202,26 @@ function rollout(adapter, segment, preloads, gain, mode, fixed = null) {
 
 export function recoverSegment(adapter, segment) {
   let best, rejection;
-  const wanted = segment.frames[0].bodies.map(r => r.hopper);
-  let preloads = wanted;
-  for (const [gain, mode] of [[5, 'hint'], [10, 'hint'], [15, 'drive'], [10, 'intake']]) {
+  const candidates = [[5, 'hint'], [10, 'hint'], [15, 'drive'], [10, 'intake'], [10, 'track']];
+  for (const [gain, mode] of candidates) {
     let candidate;
     try {
-      candidate = rollout(adapter, segment, preloads, gain, mode);
+      candidate = rollout(adapter, segment, gain, mode);
     } catch (error) {
       rejection = error;
-      // A replay may start with a hopper configuration not supported by preload seats.
-      preloads = preloads.map(n => Math.min(24, n));
       continue;
     }
-    if (!best || candidate.loss < best.loss) best = { ...candidate, preloads };
-    if (preloads === wanted) {
-      // Feed seats may absorb part of the requested preload before it reaches storage.
-      preloads = wanted.map((n, i) => n + clamp(n - candidate.initialHoppers[i], 0, 8));
-    }
+    if (!best || candidate.loss < best.loss) best = candidate;
   }
   if (!best) throw new Error(`no recoverable candidate: ${rejection.message}`);
+  if (segment.contacts?.every(flag => !flag) && best.residuals.at(-1).some(row => row[0] >= .1)) {
+    for (const mode of ['hint', 'track']) {
+      try {
+        const candidate = rollout(adapter, segment, 24, mode);
+        if (candidate.loss < best.loss) best = candidate;
+      } catch {}
+    }
+  }
   // Validate with fixed controls from the identical reset, without reading intermediate pose for control.
-  return rollout(adapter, segment, best.preloads, 0, 'drive', best.controls);
+  return rollout(adapter, segment, 0, 'drive', best.controls);
 }

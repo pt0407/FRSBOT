@@ -12,7 +12,9 @@ import numpy as np
 from frsbot.core.field import ALLIANCES, HUB_CENTRES
 from frsbot.core.inputs import Inputs
 from frsbot.core.specs import load_specs
+from frsbot.imitation.contacts import contact_flags
 from frsbot.imitation.labels import label_segments
+from frsbot.imitation.ownership import carried_owners
 from frsbot.replay.convert import convert
 from frsbot.replay.rbrp import POS_SCALE, parse, robot_pose
 from frsbot.scrape.harvest import DATA, EXCLUDE_NAMES
@@ -87,7 +89,7 @@ def _button_hints(states, ticks, k, goals, specs):
     return hints
 
 
-def make_segment(replay, states, ticks, indices, specs):
+def make_segment(replay, states, ticks, indices, specs, owners):
     start = indices[0]
     previous = start - 1 if start and 0 < ticks[start] - ticks[start - 1] <= 12 else start
     before, now = states[previous].fuel, states[start].fuel
@@ -95,14 +97,15 @@ def make_segment(replay, states, ticks, indices, specs):
     vel[before.where != now.where] = 0
     # Quantized positions can jump when a recycled ball re-enters the field.
     vel[np.linalg.norm(vel, axis=1) > 25] = 0
-    goals = label_segments(states[start:indices[-1] + 1], specs)
+    recorded = states[start:indices[-1] + 1]
+    goals = label_segments(recorded, specs)
     frames = [dict(tick=ticks[k], bodies=_bodies(replay, ticks, k), fuel=_fuel(states[k]),
                    buttons=_button_hints(states, ticks, k, goals, specs)) for k in indices]
     robots = [dict(id=r["id"], team=r["team"], alliance=r["alliance"],
                    start=r.get("start") or dict(fx=0, fy=0, headingDeg=0), speed=specs[r["team"]].max_speed,
                    turnRate=specs[r["team"]].turn_rate) for r in replay.robots]
-    payload = dict(robots=robots, seed=replay.start["seed"],
-                   initialFuel=dict(frames[0]["fuel"], vel=vel.ravel().tolist()), frames=frames)
+    payload = dict(robots=robots, seed=replay.start["seed"], contacts=contact_flags(recorded, specs),
+                   initialFuel=dict(frames[0]["fuel"], vel=vel.ravel().tolist(), owners=owners), frames=frames)
     return goals, payload
 
 
@@ -121,7 +124,7 @@ def _run(segment):
         return {"rejection": str(error)}
 
 
-def write_run(path, source, states, ticks, selections, goals, results):
+def write_run(path, source, states, ticks, selections, goals, results, contacts=None):
     start = np.array([k for segment in selections for k in segment[:-1]])
     end = np.array([k for segment in selections for k in segment[1:]])
     robot_states = [states[k].robots for k in start]
@@ -150,6 +153,7 @@ def write_run(path, source, states, ticks, selections, goals, results):
         goal_kind=np.array([[g.kind for g in row] for row in goals])[segment_id],
         goal_point=np.array([[g.point for g in row] for row in goals], dtype=np.float32)[segment_id],
         initial_hopper=[r["initialHoppers"] for r in results],
+        **({} if contacts is None else {"contacts": np.asarray(contacts, dtype=np.uint8)}),
     )
 
 
@@ -167,12 +171,14 @@ def recover_run(pool, path, source, destination, control_ticks, limit):
     if not selections:
         print(f"skipped {path.name}: no complete 2 s segments", flush=True)
         return
-    goals = []
+    goals, contacts = [], []
+    owners = carried_owners(states, replay.events, {s[0] for s in selections})
 
     def jobs():
         for selection in selections:
-            labels, segment = make_segment(replay, states, ticks, selection, specs)
+            labels, segment = make_segment(replay, states, ticks, selection, specs, owners[selection[0]])
             goals.append(labels)
+            contacts.append(segment["contacts"])
             yield segment
 
     results = list(pool.imap(_run, jobs(), chunksize=1))
@@ -185,8 +191,8 @@ def recover_run(pool, path, source, destination, control_ticks, limit):
     if not valid:
         print(f"skipped {path.name}: all segments rejected", flush=True)
         return
-    selections, goals, results = ([xs[i] for i in valid] for xs in (selections, goals, results))
-    write_run(destination, source, states, ticks, selections, goals, results)
+    selections, goals, results, contacts = ([xs[i] for i in valid] for xs in (selections, goals, results, contacts))
+    write_run(destination, source, states, ticks, selections, goals, results, contacts)
     print(f"{source} {path.name}: {len(selections)} segments, {sum(len(s) - 1 for s in selections)} frames", flush=True)
 
 
