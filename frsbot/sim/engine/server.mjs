@@ -8,7 +8,12 @@ const directory = path.resolve(process.argv[2] ?? fileURLToPath(new URL('../../.
 const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
 const teams = new Set(JSON.parse(fs.readFileSync(new URL('../../../data/robot_feel.json', import.meta.url), 'utf8')).map(r => r.team));
 const constructor = 'constructor(t,e,i){this.e=t,this.p=e,this.ids=i,';
-let sim = null, started = false;
+let sim = null, started = false, multi = false;
+
+function currentView() {
+  const view = sim.views();
+  return multi ? { ...view, events: sim.drainEvents() } : view;
+}
 
 function validateConfig(config) {
   if (!teams.has(config.team)) throw new Error(`unknown team ${config.team}`);
@@ -24,7 +29,16 @@ async function create(config) {
   const defaults = { alliance: 'blue', start: { fx: 0, fy: 0, headingDeg: 0 }, seed: 1,
     auto: 'none', event: 'event', hp: true, unload: true, freeplay: false };
   config = { ...defaults, ...config };
+  if (config.robots !== undefined) {
+    if (!Array.isArray(config.robots) || config.robots.length < 1 || config.robots.length > 6) throw new Error('robots requires 1 to 6 slots');
+    for (const slot of config.robots) {
+      validateConfig({ ...config, ...slot });
+      if (!Number.isInteger(slot.preload) || slot.preload < 0 || slot.preload > 8) throw new Error('preload must be an integer in [0, 8]');
+    }
+    config = { ...config, ...config.robots[0] };
+  }
   validateConfig(config);
+  multi = Boolean(config.robots);
   sim?.dispose(); sim = null; started = false;
   let ready, fail;
   const prepared = new Promise((resolve, reject) => { ready = resolve; fail = reject; });
@@ -51,6 +65,11 @@ async function create(config) {
       if (path.basename(file) === manifest.sim_chunk) {
         if (source.split(constructor).length !== 2) throw new Error('WASM sim constructor changed; update engine adapter');
         source = source.replace(constructor, 'constructor(t,e,i){globalThis.__sims.push(this);this.e=t,this.p=e,this.ids=i,');
+        if (config.robots) {
+          const marker = 'function iD(t,e){';
+          if (source.split(marker).length !== 2) throw new Error('WASM config factory changed; update multi-robot adapter');
+          source = source.replace(marker, 'globalThis.__teamByNumber=t.i(58475).teamByNumber;' + marker);
+        }
       }
       vm.runInContext(source, context, { filename: file });
     }
@@ -73,7 +92,15 @@ async function create(config) {
     for (const listener of context.__listeners) listener(event);
     sim = await prepared;
     if (!sim) throw new Error('worker prepared without a captured WASM simulation');
-    return sim.views();
+    if (config.robots) {
+      const engine = sim.e;
+      sim.dispose(); sim = null;
+      sim = engine.create({ robots: config.robots.map((slot, id) => ({
+        ...slot, id, team: context.__teamByNumber(slot.team), local: false,
+      })), seed: config.seed, auto: config.auto, event: config.event,
+      hpThrows: config.hp, hpUnloads: config.unload, freeplay: config.freeplay });
+    }
+    return currentView();
   } finally { clearTimeout(timer); }
 }
 
@@ -115,7 +142,7 @@ try {
           const inputs = inputsFor(request.inputs);
           for (let i = 0; i < n; i++) sim.step(inputs);
         } else if (request.cmd !== 'state') throw new Error(`unknown command ${request.cmd}`);
-        view = sim.views();
+        view = currentView();
       }
       process.stdout.write(JSON.stringify({ ok: true, view, engine: sim?.engine, build: sim?.engineBuild },
         (_key, value) => ArrayBuffer.isView(value) ? Array.from(value) : value) + '\n');
