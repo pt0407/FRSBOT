@@ -22,7 +22,8 @@ def convert(rep: Replay, specs: list[RobotSpec] | None = None) -> list[GameState
     if len(rep.fuel) != len(rep.frames):
         raise ValueError("conversion requires parse(fuel=True) with FUEL for every frame")
     metas = getattr(rep, "metas", [])
-    origin = rep.frames[0][0] / 60 + auto_start_seconds(metas)
+    origin = (rep.meta["autoStartTick"] / 60 if "autoStartTick" in rep.meta
+              else rep.frames[0][0] / 60 + auto_start_seconds(metas))
     first_inactive = next((m["firstInactive"] for _, m in metas if m.get("firstInactive") is not None), None)
     by_team = {spec.team: spec for spec in (load_specs() if specs is None else specs)}
     states = []
