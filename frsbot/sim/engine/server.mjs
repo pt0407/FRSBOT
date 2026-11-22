@@ -3,12 +3,13 @@ import path from 'node:path';
 import readline from 'node:readline';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { recoverSegment } from './recovery.mjs';
 
 const directory = path.resolve(process.argv[2] ?? fileURLToPath(new URL('../../../data/engine', import.meta.url)));
 const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
 const teams = new Set(JSON.parse(fs.readFileSync(new URL('../../../data/robot_feel.json', import.meta.url), 'utf8')).map(r => r.team));
 const constructor = 'constructor(t,e,i){this.e=t,this.p=e,this.ids=i,';
-let sim = null, started = false;
+let sim = null, started = false, recovery = null;
 
 function validateConfig(config) {
   if (!teams.has(config.team)) throw new Error(`unknown team ${config.team}`);
@@ -52,6 +53,12 @@ async function create(config) {
         if (source.split(constructor).length !== 2) throw new Error('WASM sim constructor changed; update engine adapter');
         source = source.replace(constructor, 'constructor(t,e,i){globalThis.__sims.push(this);this.e=t,this.p=e,this.ids=i,');
       }
+      if (config.recovery) {
+        const lookup = 'e=(0,s.teamByNumber)(t.team)';
+        if (source.includes(lookup)) {
+          source = source.replace(lookup, 'e=(0,s.teamByNumber)(t.team),globalThis.__teamByNumber=s.teamByNumber');
+        }
+      }
       vm.runInContext(source, context, { filename: file });
     }
   };
@@ -73,6 +80,10 @@ async function create(config) {
     for (const listener of context.__listeners) listener(event);
     sim = await prepared;
     if (!sim) throw new Error('worker prepared without a captured WASM simulation');
+    if (config.recovery) {
+      if (!context.__teamByNumber) throw new Error('WASM team lookup changed; update recovery adapter');
+      recovery = { engine: sim.e, teamByNumber: context.__teamByNumber };
+    }
     return sim.views();
   } finally { clearTimeout(timer); }
 }
@@ -100,7 +111,13 @@ try {
     try {
       const request = JSON.parse(line);
       let view;
-      if (request.cmd === 'new') view = await create(request.config ?? Object.fromEntries(Object.entries(request).filter(([k]) => k !== 'cmd')));
+      if (request.cmd === 'new') {
+        recovery = null;
+        view = await create(request.config ?? Object.fromEntries(Object.entries(request).filter(([k]) => k !== 'cmd')));
+      } else if (request.cmd === 'recover') {
+        if (!recovery) throw new Error('call new with recovery enabled before recovering a segment');
+        view = recoverSegment(recovery, request.segment);
+      }
       else if (request.cmd === 'close') { sim?.dispose(); sim = null; closing = true; }
       else {
         if (!sim) throw new Error('call new before using the simulation');
