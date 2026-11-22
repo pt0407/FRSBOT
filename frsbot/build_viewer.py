@@ -23,7 +23,7 @@ def compact(path: Path):
     samples = []
     for s in d["samples"]:
         p = s["robots"][0]
-        samples.append([s["tick"], p["pos"][0], p["pos"][2], round(yaw(p["quat"]), 3), p["vel"][0], p["vel"][2]])
+        samples.append([s["tick"], p["pos"][0], p["pos"][2], round(yaw(p["quat"]), 3), p["vel"][0], p["vel"][2], p.get("hopperFuel")])
     return {
         "id": d["id"], "name": r0["name"], "team": r0["team"], "alliance": r0["alliance"],
         "kind": d["kind"], "score": (d.get("score") or {}).get(r0["alliance"]),

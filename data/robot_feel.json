@@ -1,6 +1,10 @@
 [
  {
   "team": 1114,
+  "frameLength": 0.62484,
+  "frameWidth": 0.762,
+  "bumperLength": 0.785876,
+  "bumperWidth": 0.925576,
   "robotName": "Simbot Tim",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.02,
@@ -12,6 +16,10 @@
  },
  {
   "team": 1323,
+  "frameLength": 0.7112,
+  "frameWidth": 0.7112,
+  "bumperLength": 0.8763,
+  "bumperWidth": 0.8763,
   "robotName": "1323",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.9,
@@ -23,6 +31,10 @@
  },
  {
   "team": 1360,
+  "frameLength": 0.69215,
+  "frameWidth": 0.69215,
+  "bumperLength": 0.85725,
+  "bumperWidth": 0.85725,
   "robotName": "Andromeda",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.95,
@@ -34,6 +46,10 @@
  },
  {
   "team": 1678,
+  "frameLength": 0.6858,
+  "frameWidth": 0.6858,
+  "bumperLength": 0.8128,
+  "bumperWidth": 0.81915,
   "robotName": "Limestone",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.4,
@@ -45,6 +61,10 @@
  },
  {
   "team": 1690,
+  "frameLength": 0.635,
+  "frameWidth": 0.7366,
+  "bumperLength": 0.804164,
+  "bumperWidth": 0.913384,
   "robotName": "KEPLER",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.4,
@@ -55,8 +75,12 @@
   "_gap": 1214
  },
  {
-  "team": null,
-  "robotName": null,
+  "team": 1833,
+  "frameLength": 0.6096,
+  "frameWidth": 0.762,
+  "bumperLength": 0.785876,
+  "bumperWidth": 0.937768,
+  "robotName": "Clover",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.39,
   "turnRate": 9.42,
@@ -67,6 +91,10 @@
  },
  {
   "team": 1706,
+  "frameLength": 0.645922,
+  "frameWidth": 0.768604,
+  "bumperLength": 0.797052,
+  "bumperWidth": 0.9144,
   "robotName": "Mirage",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.5,
@@ -78,6 +106,10 @@
  },
  {
   "team": 254,
+  "frameLength": 0.6731,
+  "frameWidth": 0.7366,
+  "bumperLength": 0.8128,
+  "bumperWidth": 0.8763,
   "robotName": "Overload",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.4,
@@ -88,7 +120,11 @@
   "_gap": 1161
  },
  {
-  "team": null,
+  "team": 2056,
+  "frameLength": 0.6477,
+  "frameWidth": 0.7493,
+  "bumperLength": 0.8255,
+  "bumperWidth": 0.9271,
   "robotName": "Desperate Measures",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.5,
@@ -100,6 +136,10 @@
  },
  {
   "team": 2481,
+  "frameLength": 0.5461,
+  "frameWidth": 0.8509,
+  "bumperLength": 0.7112,
+  "bumperWidth": 1.016,
   "robotName": "Clyde",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.3,
@@ -111,6 +151,10 @@
  },
  {
   "team": 6329,
+  "frameLength": 0.6096,
+  "frameWidth": 0.762,
+  "bumperLength": 0.775208,
+  "bumperWidth": 0.9271,
   "robotName": "Roman II",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.3,
@@ -121,7 +165,11 @@
   "_gap": 1156
  },
  {
-  "team": 5,
+  "team": 5000,
+  "frameLength": 0.72644,
+  "frameWidth": 0.6604,
+  "bumperLength": 0.89408,
+  "bumperWidth": 0.82804,
   "robotName": "Icarus 2.0",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.5,
@@ -132,7 +180,11 @@
   "_gap": 1501
  },
  {
-  "team": null,
+  "team": 2910,
+  "frameLength": 0.6985,
+  "frameWidth": 0.6858,
+  "bumperLength": 0.8509,
+  "bumperWidth": 0.85725,
   "robotName": "Re\u2022Blitz",
   "driveMotor": null,
   "maxSpeed": 5.1,
@@ -144,6 +196,10 @@
  },
  {
   "team": 4414,
+  "frameLength": 0.635,
+  "frameWidth": 0.8128,
+  "bumperLength": 0.78232,
+  "bumperWidth": 0.98552,
   "robotName": "RIPCURRENT",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.3,
@@ -155,6 +211,10 @@
  },
  {
   "team": 4946,
+  "frameLength": 0.794512,
+  "frameWidth": 0.83185,
+  "bumperLength": 0.93726,
+  "bumperWidth": 0.97536,
   "robotName": "MOTO MOTO",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.39,
@@ -166,6 +226,10 @@
  },
  {
   "team": 60026,
+  "frameLength": 0.6858,
+  "frameWidth": 0.6477,
+  "bumperLength": 0.85725,
+  "bumperWidth": 0.791972,
   "robotName": "Competitive Concept",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.4,
@@ -177,6 +241,10 @@
  },
  {
   "team": 7558,
+  "frameLength": 0.6858,
+  "frameWidth": 0.6858,
+  "bumperLength": 0.848868,
+  "bumperWidth": 0.847725,
   "robotName": "Vanguard",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.5,
@@ -187,7 +255,11 @@
   "_gap": 1035
  },
  {
-  "team": null,
+  "team": 7769,
+  "frameLength": 0.644652,
+  "frameWidth": 0.746252,
+  "bumperLength": 0.817372,
+  "bumperWidth": 0.918972,
   "robotName": "CHUNK",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.39,
@@ -199,6 +271,10 @@
  },
  {
   "team": 971,
+  "frameLength": 0.62484,
+  "frameWidth": 0.75184,
+  "bumperLength": 0.7874,
+  "bumperWidth": 0.9144,
   "robotName": "Mixtape",
   "driveMotor": "krakenX60Foc",
   "maxSpeed": 4.4,
@@ -209,8 +285,12 @@
   "_gap": 1354
  },
  {
-  "team": null,
-  "robotName": null,
+  "team": 9785,
+  "frameLength": 0.7112,
+  "frameWidth": 0.6731,
+  "bumperLength": 0.883412,
+  "bumperWidth": 0.809752,
+  "robotName": "Lickitung",
   "driveMotor": "krakenX60",
   "maxSpeed": 4.9,
   "turnRate": 10.5,

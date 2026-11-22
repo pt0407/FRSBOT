@@ -1,13 +1,15 @@
 """Decoder for REBUILT replay files (RBRP container, version 2).
 
 Container:  magic 'RBRP' | u8 version | u32 headLen | head JSON | u32 nFrames | (u32 len | frame)*
-Frames are delta-encoded Int16 state arrays (robots, hubs, doors) plus a fuel section.
-Only robot state is decoded here; fuel is skipped.
+Frames are delta-encoded Int16 state arrays (robots, hubs, doors) plus a FUEL section (see fuel.py).
+The recorder keeps one frame every 2 ticks (30 Hz): a key frame (type 3) every 80 ticks, packed deltas (type 4) between.
 """
 import json
 import struct
 import zlib
 from dataclasses import dataclass, field
+
+from frsbot.fuel import FuelState
 
 MAGIC = b"RBRP"
 QUAT_SCALE = 1 / 32767
@@ -35,6 +37,8 @@ class Replay:
     state_len: int
     frames: list = field(default_factory=list)
     events: list = field(default_factory=list)
+    fuel: list = field(default_factory=list)  # per frame (pos int16 array, where array) when parse(fuel=True)
+    radius: object = None
 
 
 def gunzip_if_needed(raw: bytes) -> bytes:
@@ -59,7 +63,7 @@ def layout(start: dict):
     return robots, hubs, doors, at + 2
 
 
-def parse(raw: bytes) -> Replay:
+def parse(raw: bytes, fuel: bool = False) -> Replay:
     raw = gunzip_if_needed(raw)
     if raw[:4] != MAGIC:
         raise ValueError("not an RBRP replay")
@@ -69,11 +73,13 @@ def parse(raw: bytes) -> Replay:
     offsets, _, _, state_len = layout(start)
     rep = Replay(meta=head["meta"], start=start, robots=start["robots"], robot_offsets=offsets, state_len=state_len)
     rep.events = head.get("events", [])
+    rep.metas = head.get("metas", [])
     p = 9 + head_len
     n_frames = struct.unpack_from("<I", raw, p)[0]
     p += 4
     state = [0] * state_len
-    prev_tick = None
+    fs = FuelState(start["fuelCount"])
+    synced = False
     for _ in range(n_frames):
         flen = struct.unpack_from("<I", raw, p)[0]
         p += 4
@@ -83,16 +89,15 @@ def parse(raw: bytes) -> Replay:
         tick = struct.unpack_from("<i", f, 4)[0]
         if ftype == 3:
             state = [0] * state_len
-        elif ftype == 4 and prev_tick is not None and tick == prev_tick + 1:
-            pass
-        elif ftype == 2 and prev_tick is not None:
-            pass
-        else:
-            prev_tick = None
+            synced = True
+        elif not synced or ftype not in (2, 4):
             continue
-        apply_runs(f, state, ftype)
-        prev_tick = tick
+        q = apply_runs(f, state, ftype)
+        if fuel:
+            fs.apply(f, q, ftype)
+            rep.fuel.append((fs.pos.astype("int16"), fs.where.copy()))
         rep.frames.append((tick, list(state)))
+    rep.radius = fs.radius
     return rep
 
 
@@ -113,6 +118,7 @@ def apply_runs(f: bytes, state: list, ftype: int):
         q += 2 * count
         if ftype == 4:
             idx += count
+    return q
 
 
 def robot_pose(state: list, rep: Replay, i: int) -> dict:
