@@ -1,5 +1,5 @@
 // Pulls the REBUILT leaderboard (solo, duos, trios) over the public websocket.
-// Usage: node frsbot/fetch_board.mjs data/board.json
+// Usage: node frsbot/scrape/fetch_board.mjs data/board.json
 import { writeFileSync } from "node:fs";
 
 const url = "wss://reefscape-ws.frsim.com/rebuilt-ws";

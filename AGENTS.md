@@ -5,13 +5,19 @@ It should play singleplayer, 1v1, 2v2, and 3v3 like a strong human, adapt to the
 
 ## Layout
 
-- `frsbot/rbrp.py`: decoder for RBRP replay files (gzip-compressed on the wire). Robot pose, velocity, quaternion, hopper.
-- `frsbot/harvest.py`: downloads shared leaderboard replays, decodes to `data/telemetry/*.json`, skips driver name `404`.
-- `frsbot/fetch_board.mjs`: pulls the leaderboard over the websocket (`rebuiltBoard`) into `data/board.json`.
-- `frsbot/events.py`: scrapes completed REBUILT events (matches, scores, breakdowns) into `data/events/*.json`.
-- `frsbot/sim.py`: offline drive model ported from the game code. Per-robot feel values, deadzone, acceleration limit, hopper.
-- `frsbot/controller.py`: baseline waypoint follower on a pro route. Writes `data/sim/*.json`.
-- `frsbot/build_viewer.py`: bundles telemetry and sim runs into `viewer/replays.js`.
+See `docs/ARCHITECTURE.md` for the design and target layout.
+
+- `frsbot/core/specs.py`: shared robot specs, drive feel, frame/bumper dimensions and hopper capacity.
+- `frsbot/core/inputs.py`: shared Inputs and the 10-byte wire codec.
+- `frsbot/replay/rbrp.py`: decoder for RBRP replay files (gzip-compressed on the wire). Robot pose, velocity, quaternion, hopper.
+- `frsbot/replay/fuel.py`: FUEL section codec.
+- `frsbot/scrape/harvest.py`: downloads shared leaderboard replays, decodes to `data/telemetry/*.json`, skips driver name `404`.
+- `frsbot/scrape/fetch_board.mjs`: pulls the leaderboard over the websocket (`rebuiltBoard`) into `data/board.json`.
+- `frsbot/scrape/events.py`: scrapes completed REBUILT events (matches, scores, breakdowns) into `data/events/*.json`.
+- `frsbot/sim/drive.py`: offline drive model ported from the game code. Per-robot feel values, deadzone, acceleration limit, hopper.
+- `frsbot/sim/push.py`: fits the FUEL push/roll model from cached replays in `data/raw/`.
+- `frsbot/baseline/route_follow.py`: baseline waypoint follower on a pro route. Writes `data/sim/*.json`.
+- `frsbot/tools/build_viewer.py`: bundles telemetry and sim runs into `viewer/replays.js`.
 - `viewer/index.html`: replay viewer. Serve with `python3 -m http.server 8765` from `viewer/`.
 - `data/robot_feel.json`: per-robot drive values (max speed, turn rate, accel, hopper capacity) from the game bundle.
 
@@ -38,11 +44,13 @@ It should play singleplayer, 1v1, 2v2, and 3v3 like a strong human, adapt to the
 ## Commands
 
 ```
-node frsbot/fetch_board.mjs data/board.json
-python3 -m frsbot.harvest data/board.json
-python3 -m frsbot.events
-python3 -m frsbot.controller
-python3 -m frsbot.build_viewer
+node frsbot/scrape/fetch_board.mjs data/board.json
+python3 -m frsbot.scrape.harvest data/board.json
+python3 -m frsbot.scrape.events
+python3 -m frsbot.sim.push
+python3 -m frsbot.baseline.route_follow
+python3 -m frsbot.tools.build_viewer
+python3 -m pytest -q
 ```
 
 ## Next steps

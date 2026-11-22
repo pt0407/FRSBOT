@@ -9,17 +9,16 @@ Assumptions still to verify against replays (see validate.py):
   - turn acceleration limit (not in the bundle we read; set to TURN_ACCEL)
   - tick rate of 60 Hz
 """
-import json
 import math
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
+
+from frsbot.core.specs import SPECS_PATH, Feel, load_records
 
 DEADZONE = 0.12  # from the game's drive input shaping
 TICK_HZ = 60.0
 TURN_ACCEL = 10.0  # rad/s^2, assumed
 
-FEEL_PATH = Path(__file__).resolve().parent.parent / "data" / "robot_feel.json"
+FEEL_PATH = SPECS_PATH
 
 
 def shape(stick: float) -> float:
@@ -30,19 +29,7 @@ def shape(stick: float) -> float:
 
 
 def load_feel():
-    return json.loads(FEEL_PATH.read_text())
-
-
-@dataclass
-class Feel:
-    max_speed: float  # m/s
-    turn_rate: float  # rad/s
-    accel: float  # m/s^2
-    hopper_capacity: int  # FUEL the robot can carry
-
-    @classmethod
-    def from_spec(cls, spec: dict):
-        return cls(spec["maxSpeed"], spec["turnRate"], spec["accel"], spec["hopperCapacity"])
+    return load_records(FEEL_PATH)
 
 
 class Robot:

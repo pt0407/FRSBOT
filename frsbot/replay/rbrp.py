@@ -9,7 +9,7 @@ import struct
 import zlib
 from dataclasses import dataclass, field
 
-from frsbot.fuel import FuelState
+from frsbot.replay.fuel import FuelState
 
 MAGIC = b"RBRP"
 QUAT_SCALE = 1 / 32767

@@ -1,12 +1,12 @@
 """Bundle decoded replay telemetry into viewer/replays.js so the viewer works from file:// (no server needed).
 
-Usage: python -m frsbot.build_viewer
+Usage: python -m frsbot.tools.build_viewer
 """
 import json
 import math
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 TEL = ROOT / "data" / "telemetry"
 OUT = ROOT / "viewer" / "replays.js"
 

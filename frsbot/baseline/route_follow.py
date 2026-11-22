@@ -3,16 +3,16 @@
 Replay samples are ~1.3 s apart, so the route is a chain of straight chords, not a racing line.
 Pure pursuit reversed on those chords, so this uses plain waypoint following with a 2 m arrival radius.
 
-Usage: python -m frsbot.controller
+Usage: python -m frsbot.baseline.route_follow
 Writes the simulated run to data/sim/ so it shows up in the viewer.
 """
 import json
 import math
 from pathlib import Path
 
-from frsbot.sim import DEADZONE, Feel, Robot, TICK_HZ, load_feel
+from frsbot.sim.drive import DEADZONE, Feel, Robot, TICK_HZ, load_feel
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 TEL = ROOT / "data" / "telemetry"
 SIM = ROOT / "data" / "sim"
 ARRIVE = 2.0  # m, waypoint counts as reached inside this radius

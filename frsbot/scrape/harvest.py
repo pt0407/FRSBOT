@@ -1,8 +1,8 @@
 """Download shared leaderboard replays, decode to telemetry JSON, discard the raw blob.
 
 Usage:
-  python -m frsbot.harvest data/board.json
-  (data/board.json comes from frsbot/fetch_board.mjs)
+  python -m frsbot.scrape.harvest data/board.json
+  (data/board.json comes from frsbot/scrape/fetch_board.mjs)
 """
 import concurrent.futures as cf
 import gzip
@@ -11,10 +11,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from frsbot.rbrp import parse, telemetry
+from frsbot.replay.rbrp import parse, telemetry
 
 REPLAY_HOST = "https://reefscape-ws.frsim.com/rebuilt-replays"
-DATA = Path(__file__).resolve().parent.parent / "data"
+DATA = Path(__file__).resolve().parents[2] / "data"
 TEL = DATA / "telemetry"
 EXCLUDE_NAMES = {"404"}  # the user's own driver name; their runs are never used
 

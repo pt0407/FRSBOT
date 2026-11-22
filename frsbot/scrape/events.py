@@ -1,14 +1,14 @@
 """Scrape completed REBUILT events into per-event match records (scores, breakdowns, alliances).
 
 No replay files here: the public API only exposes scores and breakdowns per match.
-Usage: python -m frsbot.events
+Usage: python -m frsbot.scrape.events
 """
 import json
 import urllib.request
 from pathlib import Path
 
 API = "https://reefscape-ws.frsim.com"
-DATA = Path(__file__).resolve().parent.parent / "data" / "events"
+DATA = Path(__file__).resolve().parents[2] / "data" / "events"
 
 
 def get(path: str) -> dict:

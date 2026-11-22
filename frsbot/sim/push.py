@@ -7,7 +7,7 @@ Per 2-tick step (dt = 1/30 s), for a ground ball (where 0/1, height < 0.2 m):
      (plus its own tangential speed).
 Robot frame: +fx forward (cos a, sin a), +fy left, a = pi - quaternion yaw. Intake mouth is the front side.
 
-Usage: python -m frsbot.push   (fits on data/raw/*.rbrp, prints held-out validation)
+Usage: python -m frsbot.sim.push   (fits on data/raw/*.rbrp, prints held-out validation)
 """
 import json
 import sys
@@ -15,9 +15,9 @@ from pathlib import Path
 
 import numpy as np
 
-from frsbot.rbrp import parse
+from frsbot.replay.rbrp import parse
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
 OUT = ROOT / "data" / "push_model.json"
 DT = 2 / 60
