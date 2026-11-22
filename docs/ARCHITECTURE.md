@@ -56,9 +56,10 @@ Dependency direction: `core` <- `replay`, `sim`, `bot`, `live`; `bot` never impo
 
 ## Match model (core/field.py)
 
-Auto 0-20 s, transition 20-30, shifts 30-55 / 55-80 / 80-105 / 105-130, end game 130-160.
-Both hubs active in auto, transition and end game. In shifts they alternate; the alliance that scored more auto
-FUEL is inactive in shifts 1 and 3. FUEL scores 1 only into an active hub. Check the schedule against replay `metas`.
+Measured from replay `metas` (45 runs, 0 mismatches), t from auto start (some recordings have a 3 s countdown first):
+auto 0-20 (both active), gap 20-23 (both inactive), transition 23-33 (both active), shifts 33-58 / 58-83 / 83-108 /
+108-133 (alternate; `firstInactive` alliance, the one that scored more auto FUEL, is inactive in shifts 1 and 3),
+end game 133-163 (both active), settle 163-166 (inactive). FUEL scores 1 only into an active hub.
 
 ## Planner (the decision part)
 
