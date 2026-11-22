@@ -17,7 +17,8 @@ def test_evaluation_trace_viewer_and_tally(tmp_path, monkeypatch):
             pass
 
         def reset(self, *args, **kwargs):
-            assert kwargs["hp"] and kwargs["unload"] and kwargs["auto"] == "none"
+            assert kwargs["hp"] and kwargs["unload"]
+            assert kwargs["auto"] == "none"
             self.state = GameState(0, Phase.AUTO, {a: HubState(True, 20) for a in ("blue", "red")},
                                    [RobotState(0, 254, "blue", -6, 1, 0, 0, 0, 0, 72)],
                                    FuelState(np.empty((0, 3), np.float32), np.empty(0, np.uint8)), 0)
@@ -33,9 +34,21 @@ def test_evaluation_trace_viewer_and_tally(tmp_path, monkeypatch):
     monkeypatch.setattr(evaluate, "WasmEnv", FakeEnv)
     spec = next(s for s in load_specs() if s.team == 254)
     output = tmp_path / "data" / "sim" / "imai"
-    result = evaluate.evaluate_run(spec, "blue", 1, output, duration=.1)
+    called_at = []
+    act = evaluate.ImAI.act
+
+    def observe_act(self, state):
+        called_at.append(state.t)
+        return act(self, state)
+
+    monkeypatch.setattr(evaluate.ImAI, "act", observe_act)
+    duration = .1
+    result = evaluate.evaluate_run(spec, "blue", 1, output, duration=duration)
     assert result["score"] == result["fuel"] == 3
-    assert sum(result["goal_seconds"].values()) == .1
+    assert result["low_hopper_score_seconds"] == 0
+    assert result["auto"] == "none"
+    assert sum(result["goal_seconds"].values()) == duration
+    assert min(called_at) == 0
     path = output / "imai-254-blue-1.json"
     compact = build_viewer.compact(path)
     assert compact["kind"] == "sim" and compact["score"] == 3

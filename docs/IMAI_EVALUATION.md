@@ -1,5 +1,9 @@
 # ImAI initial real-engine evaluation
 
+Historical baseline at `b386e26`. For the current controller and before/after comparison, see
+[IMAI_TUNING.md](IMAI_TUNING.md). ImAI controlled the robot from t=0 in these baseline runs too;
+`auto="none"` disables native routines, not operator control during auto.
+
 Command: `python3 -m frsbot.tools.evaluate`.
 
 30 full solo matches: 254, 2910, 1114, 4414, 60026; blue/red; seeds 1, 2, 3.

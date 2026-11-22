@@ -30,9 +30,69 @@ class Driver:
     def __init__(self, spec):
         self.spec = spec
         self.planner = Planner(spec)
-        self.closed_since = None
         self.recovering = False
         self.crossing = None
+        self.progress_at = None
+        self.open_since = None
+        self.previous_hopper = None
+        self.recovery_stage = 0
+        self.recovery_point = None
+        self.wiggle_until = 0
+        self.abandon = False
+        self.shoot_while_collecting = self.planner.profile.get("shoot_while_collecting", False)
+        self.reaim_until = 0
+
+    def progress(self, goal, state):
+        robot = state.robots[state.me]
+        self.abandon = False
+        scoring = goal.kind == "Score" and state.hubs[robot.alliance].active and robot.hopper > 0
+        if not scoring:
+            self.progress_at = None
+            self.open_since = None
+            self.previous_hopper = robot.hopper
+            self.recovery_stage = 0
+            self.recovery_point = None
+            self.recovering = False
+            return goal
+        point = self.recovery_point or goal.point
+        if self.previous_hopper is None or robot.hopper < self.previous_hopper:
+            self.progress_at = state.t
+            self.open_since = None
+            self.recovery_stage = 0
+        self.previous_hopper = robot.hopper
+        if math.dist((robot.x, robot.z), point) > .7:
+            self.progress_at = state.t
+        if self.progress_at is None:
+            self.progress_at = state.t
+        opened = robot.gate is not None and robot.gate.get("open", False)
+        if not opened:
+            self.open_since = None
+        elif self.open_since is None:
+            self.open_since = state.t
+        stalled = state.t - self.progress_at >= 2 or (self.open_since is not None and state.t - max(self.open_since, self.progress_at) >= 1)
+        if state.t >= self.wiggle_until and stalled:
+            self.recovery_stage += 1
+            self.progress_at = state.t
+            if self.recovery_stage == 1:
+                self.reaim_until = state.t + .6
+                self.progress_at = self.reaim_until
+            elif self.recovery_stage == 2:
+                point = self.planner.score_spot(state, math.pi / 6)
+                if math.dist(point, (robot.x, robot.z)) < .5:
+                    point = self.planner.score_spot(state, -math.pi / 6)
+                self.recovery_point = point
+                self.crossing = None
+            elif self.recovery_stage == 3:
+                self.wiggle_until = state.t + 1.2
+            elif self.recovery_stage >= 4:
+                if robot.hopper <= 5:
+                    self.abandon = True
+                else:
+                    self.recovery_point = self.planner.score_spot(state, -math.pi / 4)
+                    self.crossing = None
+                self.recovery_stage = 1
+        self.recovering = self.recovery_stage > 0
+        return Goal("Score", self.recovery_point or goal.point)
 
     def waypoint(self, start, target):
         if self.crossing is None:
@@ -75,6 +135,7 @@ class Driver:
         return start
 
     def act(self, goal: Goal, state):
+        goal = self.progress(goal, state)
         robot = state.robots[state.me]
         active = state.hubs[robot.alliance].active
         hub = self.planner.hub(state)
@@ -83,18 +144,14 @@ class Driver:
         shooting = goal.kind == "Score" and active and robot.hopper > 0
         own_side = robot.x < -SCORING_X if robot.alliance == "blue" else robot.x > SCORING_X
         at_spot = math.dist((robot.x, robot.z), goal.point) < .7
-        if shooting and own_side and at_spot and robot.gate is not None and not robot.gate.get("open", False):
-            if self.closed_since is None:
-                self.closed_since = state.t
-            self.recovering = state.t - self.closed_since > 1.5
-        else:
-            self.closed_since = None
-            self.recovering = False
-        target = self.planner.score_spot(state) if self.recovering else goal.point
+        target = goal.point
         point = self.waypoint((robot.x, robot.z), target)
         dx, dz = point[0] - robot.x, point[1] - robot.z
         distance = math.hypot(dx, dz)
         direction = math.atan2(dz, dx)
+        moving_shot = (self.shoot_while_collecting and goal.kind == "Collect" and active and own_side
+                       and robot.hopper > 0 and (self.spec.max_shot_speed or 0) >= 2
+                       and low + .2 <= distance_hub <= high - .5)
         arriving = distance < .3
         final_waypoint = math.dist(point, target) < .01
         vmax = self.spec.max_speed
@@ -109,6 +166,8 @@ class Driver:
         elif arriving:
             speed = max(speed, .35)
         score_speed = self.spec.max_shot_speed or self.spec.brain_equivalents.get("scoreSpeedTol", .15)
+        if moving_shot:
+            speed = min(speed, score_speed * .85)
         if shooting and final_waypoint and low <= distance_hub <= high and distance < .6:
             speed = min(speed, score_speed * .5)
         vx, vz = speed * math.cos(direction), speed * math.sin(direction)
@@ -135,5 +194,19 @@ class Driver:
             side = rel @ np.array([-math.sin(robot.a), math.cos(robot.a)])
             path_fuel = bool(np.any((ahead > 0) & (ahead < 1.2) & (abs(side) < self.spec.bumper_width / 2)))
         intake = robot.hopper < self.planner.capacity(state) and (goal.kind == "Collect" or path_fuel)
+        if shooting and state.hubs[robot.alliance].seconds_to_toggle <= self.planner.score_time(state) + 1:
+            intake = False
+        if shooting and self.recovering:
+            intake = False
         score = shooting and own_side and at_spot and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= score_speed
+        score = score or moving_shot and math.hypot(robot.vx, robot.vz) <= score_speed
+        if shooting and self.recovery_stage == 1 and state.t < self.reaim_until:
+            x = y = 0
+            score = False
+        if shooting and state.t < self.wiggle_until:
+            pulse = 1 if int((self.wiggle_until - state.t) / .3) % 2 else -1
+            y = sign * inverse_deadzone(pulse / self.spec.max_speed)
+            x = 0
+            turn = inverse_deadzone(math.copysign(.25, pulse))
+            score = True
         return Inputs(x=x, y=y, turn=turn, intake=intake, score=score, field_relative=True)

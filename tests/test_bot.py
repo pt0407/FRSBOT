@@ -53,7 +53,7 @@ def test_last_three_seconds_and_staging_transition(spec):
     state.robots[0].x = 0
     bot = ImAI(spec)
     inputs = bot.act(state)
-    assert not inputs.score and not inputs.intake and inputs.x == inputs.y == inputs.turn == 0
+    assert not inputs.score and not inputs.intake and (inputs.x or inputs.y)
     state = observation(5, 57.9)
     planner = Planner(spec)
     assert planner.plan(state).kind == "Stage"
@@ -81,6 +81,19 @@ def test_score_radius_and_zone(spec):
         point = planner.score_spot(state)
         assert math.dist(point, planner.hub(state)) == pytest.approx(3.5)
         assert point[0] < -4.3 if alliance == "blue" else point[0] > 4.3
+
+
+def test_vision_profile_uses_validated_arc_angles():
+    spec = next(s for s in load_specs() if s.team == 2910)
+    planner, state = Planner(spec), observation(47)
+    for alliance in ("blue", "red"):
+        state.robots[0].alliance = alliance
+        point = planner.score_spot(state)
+        cx, cz = planner.hub(state)
+        theta = math.atan2(point[1] - cz, point[0] - cx)
+        back = math.pi if alliance == "blue" else 0
+        error = (theta - back + math.pi) % (2 * math.pi) - math.pi
+        assert abs(math.degrees(error)) == pytest.approx(35)
 
 
 def test_replanning_interval_completion_and_invalid_goal(spec):
@@ -157,12 +170,91 @@ def test_closed_gate_recovery_and_unknown_gates(spec):
     assert not driver.recovering
     state.robots[0].gate = dict(open=False, heading=True)
     driver.act(goal, state)
-    state.t = 1.6
+    state.t = 2.1
     driver.act(goal, state)
     assert driver.recovering
     state.robots[0].gate["open"] = True
+    state.robots[0].hopper -= 1
     driver.act(goal, state)
     assert not driver.recovering
+
+
+def test_progress_recovery_open_gate_and_residual_abandon(spec):
+    state, driver = observation(3), Driver(spec)
+    state.robots[0].gate = {"open": True}
+    goal = Goal("Score", (-6, 1))
+    driver.act(goal, state)
+    state.t = 1.01
+    driver.act(goal, state)
+    assert driver.recovery_stage == 1
+    assert not driver.act(goal, state).score
+    state.t = 2.7
+    driver.act(goal, state)
+    assert driver.recovery_point is not None
+    state.robots[0].x, state.robots[0].z = driver.recovery_point
+    state.t = 3.8
+    driver.act(goal, state)
+    assert driver.wiggle_until > state.t
+    state.t = 5.1
+    driver.act(goal, state)
+    assert driver.abandon
+
+
+def test_closed_to_open_transition_does_not_count_closed_time_as_open(spec):
+    state, driver = observation(30), Driver(spec)
+    state.robots[0].gate = {"open": False}
+    goal = Goal("Score", (-6, 1))
+    driver.act(goal, state)
+    state.t = 1.5
+    driver.act(goal, state)
+    state.robots[0].gate["open"] = True
+    state.t = 1.6
+    driver.act(goal, state)
+    assert not driver.recovering
+    state.t = 2.01
+    driver.act(goal, state)
+    assert driver.recovering
+
+
+def test_moving_collection_uses_turret_without_disabling_intake_steering():
+    spec = next(s for s in load_specs() if s.team == 4414)
+    state = observation(20)
+    driver = Driver(spec)
+    inputs = driver.act(Goal("Collect", (-7, 2)), state)
+    assert inputs.score and inputs.intake and inputs.turn != 0
+    state.hubs["blue"].active = False
+    assert not driver.act(Goal("Collect", (-7, 2)), state).score
+
+
+@pytest.mark.parametrize("team", [254, 2910, 4414])
+def test_reaim_pauses_score_while_requesting_manual_heading(team):
+    spec = next(s for s in load_specs() if s.team == team)
+    state, driver = observation(20), Driver(spec)
+    state.robots[0].gate = {"open": True}
+    goal = Goal("Score", (-6, 1))
+    driver.act(goal, state)
+    state.t = 1.01
+    inputs = driver.act(goal, state)
+    assert driver.recovering and not inputs.score
+
+
+@pytest.mark.parametrize("alliance,x", [("blue", 6), ("red", -6)])
+def test_late_return_does_not_mistake_opponent_zone_for_own(spec, alliance, x):
+    state = observation(20, 160, alliance)
+    state.robots[0].x = x
+    goal = Planner(spec).plan(state)
+    assert goal.kind == "Score"
+    assert goal.point[0] < -4.3 if alliance == "blue" else goal.point[0] > 4.3
+
+
+def test_recovery_collection_does_not_return_empty_after_two_seconds(spec):
+    state, bot = observation(3, 5), ImAI(spec)
+    bot.collect_until, bot.collect_deadline, bot.collect_target = 4, 10, 10
+    bot.act(state)
+    assert bot.goal.kind == "Collect" and bot.collect_target == 10
+    state.robots[0].hopper = 12
+    bot.act(state)
+    assert bot.collect_target == 0
 
 
 def test_bot_backend_dependency_boundary():
@@ -170,6 +262,26 @@ def test_bot_backend_dependency_boundary():
         for node in ast.walk(ast.parse(path.read_text())):
             names = [node.module or ""] if isinstance(node, ast.ImportFrom) else [a.name for a in node.names] if isinstance(node, ast.Import) else []
             assert not any(n.startswith(("frsbot.sim", "frsbot.replay", "frsbot.live")) for n in names)
+
+
+def test_measured_score_time_and_deadline(spec):
+    planner, state = Planner(spec), observation(40, 150)
+    time = planner.score_time(state)
+    state.robots[0].hopper = 60
+    assert planner.score_time(state) > time
+    state.t = 158
+    assert planner.plan(state).kind == "Score"
+    state.robots[0].hopper = 0
+    state.t = 162
+    assert planner.plan(state).kind == "Stage"
+
+
+def test_empty_hopper_resets_recovery(spec):
+    state, driver = observation(0), Driver(spec)
+    driver.recovery_stage = 3
+    driver.recovering = True
+    assert not driver.act(Goal("Score", (-6, 1)), state).score
+    assert not driver.recovering
 
 
 @pytest.mark.parametrize("alliance", ["blue", "red"])

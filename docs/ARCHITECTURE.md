@@ -99,7 +99,8 @@ end game 133-163 (both active), settle 163-166 (inactive). FUEL scores 1 only in
 
 Replans every 0.5 s. Inputs it uses: hopper h, capacity C, own hub active/time-to-toggle, ball density map,
 time left. Definitions:
-- `T_score(p)`: drive time from p to the nearest shooting spot + h / shot_rate.
+- `T_score(p)`: route travel time plus measured score-button startup plus h / measured drain rate.
+  `data/bot_profiles.json` holds per-robot controller calibrations; unknown robots fall back to nominal fire rate.
 - Ball clusters: where==0 and height < 0.2 m, binned to 0.5 m cells, summed over a kernel the width of the intake;
   value of a cell = balls / (drive time + 0.5 s).
 
@@ -110,7 +111,9 @@ Rules, first match wins:
 4. Hub inactive and time to activation < `T_score(here)`: Stage.
 5. Otherwise Collect at the best cluster. While the hub is active, discount clusters by their distance from the
    shooting spot; while it is inactive, don't.
-6. End game, last 3 s: Score whatever is carried if in range, else keep collecting nothing (stop).
+6. End game: return with `T_score` + 3 s left, reserving time for recovery. Do not start collection without
+   time to return and unload. In the last 3 s, score in place if already in a valid own-zone arc, otherwise
+   finish returning. Empty robots stop instead of collecting FUEL they cannot score.
 
 ## Driver
 
@@ -119,6 +122,13 @@ Rules, first match wins:
   (thresholds from data/shoot_model.json).
 - Stage(point): drive there and face the hub, intake on for any balls on the way.
 - Commands go through the inverse deadzone so the game sees what we meant.
+- Score progress: after 1 s continuously open without a hopper drop, or 2 s stalled overall at the spot,
+  re-aim, try another arc point, then wiggle. After these fail with <=5 FUEL, collect again for at least 2 s
+  unless the final deadline prevents another trip. Release score briefly to gain manual heading authority;
+  the real 2910 engine ignores manual turn while score is held.
+- 2910 uses empirically visible +/-35 degree rear-side arc points. Independently aimed fast shooters can
+  hold score during collection in a valid own-zone range at safe speed; the validated policy enables 4414.
+  Collection still steers the chassis toward FUEL while its turret aims independently.
 
 ## Models fitted from replays (all held-out validated, numbers in the JSON next to the params)
 
@@ -141,7 +151,10 @@ with `--ticks 1` available for 60 Hz; `--jobs` controls parallel matches. Per-ru
 goal times, gate diagnostics and leaderboard comparisons are in gitignored `data/sim/imai/`.
 `python3 -m frsbot.tools.build_viewer` includes them. Gate durations and rate-based blocked fire opportunities
 overlap across reasons and are not actual lost-shot counts. Scores include human-player contributions.
-Leaderboard comparisons exclude driver 404; no-auto runs are not like-for-like comparisons with leaderboard autos.
+Leaderboard comparisons exclude driver 404. Native auto is always `none`: ImAI drives from t=0, including
+the auto phase, just as in teleop. No climbing is attempted. Leaderboard strategies, seeds and start poses differ.
+Use `--no-moving-score` for the collection-shooting ablation. Evaluation also records time in Score with <=5
+FUEL, FUEL carried at 163 s, robot-attributed FUEL, and collection-scoring command time. See `IMAI_TUNING.md`.
 
 Longer-term evaluation target: compare Bot and baseline on every robot spec for 5 seeds, reporting mean score,
 FUEL scored, FUEL scored while inactive (wasted), and hopper overflow. A change to the bot should not lower mean score.

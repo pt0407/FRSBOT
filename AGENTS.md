@@ -88,6 +88,15 @@ Generated traces and the summary live in gitignored `data/sim/imai/`; the viewer
 Blocked gates count overlapping command-ticks, with estimated blocked fire opportunities in the summary, not
 actual lost shots. Human-player points are included in match totals; isolated bot smoke tests disable HP.
 
+ImAI drives from t=0 with native `auto="none"`; do not enable the robot's built-in auto routines. No climbing
+is attempted. Controller calibrations live in `data/bot_profiles.json`. Reproduce HP/intake-disabled startup
+and drain measurements with `python3 -m frsbot.tools.measure_shooting --output /path/to/measurements.json`.
+The progress recovery escalates re-aim / alternate arc / wiggle / abandon <=5 FUEL; final deadlines prevent
+another late collection trip. 2910's arcs and 4414's collection-shooting policy are calibrated in the real engine.
+`--no-moving-score` disables collection shooting for comparison. Per-run metrics include
+`low_hopper_score_seconds`, `carried_at_close` (163 s), `collect_score_seconds` and robot-attributed FUEL.
+See `docs/IMAI_TUNING.md` for the before/after results and remaining limitations.
+
 ## Next steps
 
 1. Decode the FUEL section of replay frames (504 balls per run) into per-sample positions.
