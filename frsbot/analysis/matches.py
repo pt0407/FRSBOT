@@ -54,7 +54,7 @@ def episodes(mask, times, dt, minimum=.5):
     return result
 
 
-def analyze(states, *, events=(), metas=(), specs=None, partial=True):
+def analyze(states, *, events=(), metas=(), specs=None, partial=True, include_samples=False):
     if not states:
         return {"robots": [], "duration_seconds": 0, "partial": True, "warnings": ["empty match"]}
     times = np.array([s.t for s in states])
@@ -296,7 +296,7 @@ def analyze(states, *, events=(), metas=(), specs=None, partial=True):
                           "rate_loss_fuel_per_second": loss,
                           "estimated_loss_fuel": loss * defended["seconds"] if loss is not None else None,
                           "defense_starts": defense_starts, "defended_responses": responses})
-    return {"partial": partial, "duration_seconds": float(dt.sum()), "robots": summaries,
+    result = {"partial": partial, "duration_seconds": float(dt.sum()), "robots": summaries,
             "score_timeline": timeline, "final_score": timeline[-1]["score"] if timeline else None,
             "winner": (max(timeline[-1]["score"], key=lambda a: timeline[-1]["score"][a]["total"])
                        if timeline and len({s["total"] for s in timeline[-1]["score"].values()}) > 1 else None),
@@ -310,6 +310,217 @@ def analyze(states, *, events=(), metas=(), specs=None, partial=True):
                                 if k == 0 or s.hubs[a].active != states[k - 1].hubs[a].active] for a in HUB_CENTRES},
             "fouls": [{"time": float(times[k]), **e} for k, e in events if 0 <= k < n and e["t"] == "foul"],
             "blockades": [{"time": float(times[k]), **e} for k, e in events if 0 <= k < n and e["t"] == "blockade"]}
+    if include_samples:
+        releases = np.zeros((n, nr, 2), int)
+        for launch in launches:
+            k, i = launch["frame"], launch["robot_index"]
+            if i >= 0:
+                releases[k, i, int(not launch["hub_shot_proxy"])] += 1
+        result["samples"] = {"roles": roles, "collected": collected, "releases": releases,
+                             "pressure": near, "opportunity": opportunity}
+    return result
+
+
+INTENT_LABELS = ("Collect", "Score", "Feed", "Defend", "Idle")
+DEFEND_DISTANCE = 1.5
+
+
+def resample(states, hz=10):
+    """Select the first observation at/after each time bin; never interpolate FUEL."""
+    if not math.isfinite(hz) or hz <= 0:
+        raise ValueError("hz must be positive")
+    if not states:
+        return []
+    times = np.array([s.t for s in states])
+    if not np.isfinite(times).all() or np.any(np.diff(times) <= 0):
+        raise ValueError("match times must be finite and strictly increasing")
+    bins = np.floor((times - times[0]) * hz + 1e-7).astype(int)
+    return [states[i] for i in np.r_[0, np.flatnonzero(np.diff(bins)) + 1]]
+
+
+def load_match(path):
+    """Decode spectator tick timestamps (60 Hz) and select observations at 10 Hz."""
+    return resample(convert(parse(Path(path).read_bytes(), fuel=True)))
+
+
+def future_labels(states, samples=None, window=3.0):
+    """Labels/target IDs over (t,t+window], -1 for incomplete/gapped windows.
+
+    Attribution from analyze(include_samples=True) takes priority over hopper
+    proxies. Defense uses upstream's 1.5 m CENTER pressure radius, not an extra
+    1.5 m bumper gap: adding two half-diagonals would label loose traffic as
+    defense. Require opponent-half occupancy and >=50% exposure to one opponent.
+    """
+    n, nr = len(states), len(states[0].robots) if states else 0
+    labels = np.full((n, nr), -1, int)
+    targets = np.full((n, nr), -1, int)
+    if not states:
+        return labels, targets
+    times = np.array([s.t for s in states])
+    if window <= 0 or np.any(np.diff(times) <= 0):
+        raise ValueError("window and time differences must be positive")
+    for k, state in enumerate(states):
+        end = np.searchsorted(times, state.t + window + 1e-7, side="right")
+        if times[-1] < state.t + window - 1e-7 or state.t < 0 or state.t + window > 163:
+            continue
+        if np.any(np.diff(times[k:end]) > .15):
+            continue
+        weights = np.diff(times[k:end])
+        for i, r in enumerate(state.robots):
+            score = feed = collect = 0
+            exposure = Counter()
+            distances = defaultdict(list)
+            for j in range(k + 1, end):
+                previous, current = states[j - 1].robots[i], states[j].robots[i]
+                own = current.x < -ALLIANCE_ZONE_EDGE if r.alliance == "blue" else current.x > ALLIANCE_ZONE_EDGE
+                drop = max(0, previous.hopper - current.hopper)
+                if samples is None:
+                    score += drop * own * states[j].hubs[r.alliance].active
+                    feed += drop * (not own)
+                    collect += max(0, current.hopper - previous.hopper)
+                else:
+                    score += samples["releases"][j, i, 0] * states[j].hubs[r.alliance].active
+                    feed += samples["releases"][j, i, 1]
+                    collect += samples["collected"][j, i]
+                opponent_half = current.x > 0 if r.alliance == "blue" else current.x < 0
+                for other in states[j].robots:
+                    if other.alliance == r.alliance:
+                        continue
+                    d = math.hypot(current.x - other.x, current.z - other.z)
+                    if opponent_half and d <= DEFEND_DISTANCE:
+                        exposure[other.id] += weights[j - k - 1]
+                        distances[other.id].append(d)
+            if score >= 2:
+                label = "Score"
+            elif feed >= 2:
+                label = "Feed"
+            elif collect >= 2:
+                label = "Collect"
+            else:
+                eligible = [other for other, seconds in exposure.items() if seconds >= window * .5 - 1e-7]
+                label = "Defend" if eligible else "Idle"
+                if eligible:
+                    targets[k, i] = min(eligible, key=lambda other: (np.mean(distances[other]), other))
+            labels[k, i] = INTENT_LABELS.index(label)
+    return labels, targets
+
+
+def prepare_match(path):
+    """Keep native-rate attribution, then bin its counts into the 10 Hz sequence."""
+    rep = parse(Path(path).read_bytes(), fuel=True)
+    full = convert(rep)
+    result = analyze(full, events=rep.events, metas=rep.metas,
+                     partial=rep.meta.get("partial", True), include_samples=True)
+    states = resample(full)
+    if not states:
+        return states, {}, result, ""
+    indices = np.searchsorted([s.t for s in full], [s.t for s in states])
+    native = result.pop("samples")
+    samples = {key: value[indices] for key, value in native.items()}
+    for key in ("collected", "releases"):
+        total = np.cumsum(native[key], axis=0)[indices]
+        samples[key] = np.diff(total, axis=0, prepend=total[:1])
+    # Match identity excludes capture time/path, so repeated partial captures of
+    # one game cannot cross the train/test boundary.
+    identity = json.dumps([rep.start.get("seed"), rep.meta.get("autoStartTick"),
+                           [(r["id"], r["team"], r["alliance"]) for r in rep.robots]], sort_keys=True)
+    return states, samples, result, identity
+
+
+def replay_paths(directory):
+    return sorted(Path(directory).rglob("*.0.rbrp"))
+
+
+def intent_summary(states, samples, result, source):
+    labels, targets = future_labels(states, samples)
+    counts = np.bincount(labels[labels >= 0], minlength=len(INTENT_LABELS))
+    timelines = []
+    suppression = []
+    evasion = Counter()
+    nearest = []
+    for i, r in enumerate(states[0].robots if states else []):
+        periods = []
+        for start in sorted({int(s.t // 5) * 5 for s in states if s.t >= 0}):
+            values = [int(labels[k, i]) for k, s in enumerate(states)
+                      if start <= s.t < start + 5 and labels[k, i] >= 0]
+            if values:
+                winner = Counter(values).most_common(1)[0][0]
+                periods.append({"t": start, "label": INTENT_LABELS[winner]})
+        timelines.append({"id": r.id, "periods": periods})
+        bins = {name: {"seconds": 0., "drops": 0., "samples": 0} for name in ("defended", "clear")}
+        for k in range(len(states) - 1):
+            state, following = states[k:k + 2]
+            robot = state.robots[i]
+            ds = [math.hypot(robot.x - other.x, robot.z - other.z) for other in state.robots
+                  if other.alliance != robot.alliance]
+            distance = min(ds, default=math.inf)
+            if math.isfinite(distance):
+                nearest.append(distance)
+            own = robot.x < -ALLIANCE_ZONE_EDGE if robot.alliance == "blue" else robot.x > ALLIANCE_ZONE_EDGE
+            dt = following.t - state.t
+            if not (0 <= state.t < 163 and dt <= .15 and own and state.hubs[r.alliance].active):
+                continue
+            defended = distance <= DEFEND_DISTANCE
+            bucket = bins["defended" if defended else "clear"]
+            bucket["seconds"] += dt
+            bucket["samples"] += 1
+            bucket["drops"] += max(0, robot.hopper - following.robots[i].hopper)
+            if defended and labels[k, i] >= 0:
+                end = min(len(states) - 1, k + 30)
+                moved = math.hypot(states[end].robots[i].x - robot.x, states[end].robots[i].z - robot.z) >= 1
+                label = INTENT_LABELS[labels[k, i]]
+                evasion["feed" if label == "Feed" else "keep_shooting" if label == "Score" else "move" if moved else "other"] += 1
+        for bucket in bins.values():
+            bucket["drops_per_second"] = bucket["drops"] / bucket["seconds"] if bucket["seconds"] else None
+        suppression.append({"id": r.id, "team": r.team, **bins})
+    return {"source": str(source), "partial": result.get("partial"),
+            "duration_seconds": result["duration_seconds"], "robots": len(timelines),
+            "samples": int(counts.sum()), "label_counts": dict(zip(INTENT_LABELS, counts.tolist())),
+            "role_timelines_5s": timelines, "hopper_drop_suppression": suppression,
+            "attributed_scoring_rates": [{key: r[key] for key in
+                                          ("id", "team", "defended_rate", "undefended_rate")}
+                                         for r in result["robots"]],
+            "evasion_windows": dict(evasion),
+            "nearest_opponent_m_quantiles": np.quantile(nearest, [0, .1, .25, .5, .75, .9, 1]).tolist() if nearest else [],
+            "pressure_fraction_by_radius": {str(d): float(np.mean(np.array(nearest) <= d)) if nearest else None
+                                            for d in (1., DEFEND_DISTANCE, 2.)}}
+
+
+def analyze_directory(directory, output):
+    results = []
+    for path in replay_paths(directory):
+        states, samples, native, _ = prepare_match(path)
+        results.append(intent_summary(states, samples, native, path))
+    counts = Counter()
+    for result in results:
+        counts.update(result["label_counts"])
+    total = sum(counts.values())
+    exposure = {name: {"seconds": 0., "drops": 0., "samples": 0} for name in ("defended", "clear")}
+    for result in results:
+        for robot in result["hopper_drop_suppression"]:
+            for name in exposure:
+                for key in exposure[name]:
+                    exposure[name][key] += robot[name][key]
+    rates = {name: value["drops"] / value["seconds"] if value["seconds"] else None for name, value in exposure.items()}
+    ratio = rates["defended"] / rates["clear"] if rates["defended"] is not None and rates["clear"] else None
+    summary = {"matches": results, "label_counts": dict(counts),
+               "role_time_fractions": {key: value / total for key, value in counts.items()} if total else {},
+               "suppression_exposure": exposure, "suppression_ratio": ratio,
+               "notes": ["Overlapping 3 s future windows, not independent examples or causal suppression.",
+                         "10 Hz hopper-drop rates miss simultaneous intake/shooting; native attributed rates also included.",
+                         "1.5 m center-distance pressure matches upstream; no extra bumper-radius inflation.",
+                         "Anonymous ranked identities cannot exclude owner 404; exploratory only, not approved training corpus."]}
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n")
+    print(f"matches={len(results)} robots={sum(r['robots'] for r in results)} samples={total}")
+    print("label_counts=" + json.dumps(dict(counts), sort_keys=True))
+    print("role_time_fractions=" + json.dumps(summary["role_time_fractions"], sort_keys=True))
+    print("suppression=" + json.dumps({"ratio": ratio, "exposure": exposure}, sort_keys=True))
+    for result in results:
+        print(f"{Path(result['source']).name}: pressure_fraction_by_radius={result['pressure_fraction_by_radius']} "
+              f"nearest_opponent_m_quantiles={result['nearest_opponent_m_quantiles']} evasion={result['evasion_windows']}")
+    print(f"wrote {output}")
 
 
 def aggregate(matches):
@@ -336,8 +547,13 @@ def aggregate(matches):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("replays", nargs="+", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if len(args.replays) == 1 and args.replays[0].is_dir():
+        analyze_directory(args.replays[0], args.output or Path("data/analysis/match_stats.json"))
+        return
+    if args.output is None:
+        parser.error("--output is required for replay file arguments")
     results = []
     for path in args.replays:
         rep = parse(path.read_bytes(), fuel=True)
