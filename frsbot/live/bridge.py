@@ -33,6 +33,12 @@ GRAPHICS = """() => {
 }"""
 
 
+def bot_start(spec, alliance):
+    from frsbot.bot.auto_route import AutoRoute
+    route = AutoRoute.for_team(spec)
+    return route.start_for(alliance) if route else None
+
+
 def state_summary(state):
     return dict(t=state.t, phase=state.phase.value, me=state.me,
                 robots=[asdict(r) for r in state.robots],
@@ -41,7 +47,7 @@ def state_summary(state):
                 fuel_count=len(state.fuel.where))
 
 
-async def start_solo(page, team, alliance):
+async def start_solo(page, team, alliance, start=None):
     await page.goto("https://rebuilt.frsim.com", wait_until="networkidle")
     await page.wait_for_timeout(3500)
     await page.locator("button").filter(has_text="Singleplayer").click()
@@ -49,6 +55,8 @@ async def start_solo(page, team, alliance):
     await page.locator("button").filter(has_text=re.compile(rf"^{team}(?=\D)")).first.click()
     await page.locator("button").filter(has_text=re.compile(r"^Drive ")).click()
     await page.locator("button").filter(has_text=re.compile(rf"^{alliance}$", re.I)).click()
+    if start:
+        await page.evaluate("s => { window.__imai.start = s; }", start)
     await page.locator("button").filter(has_text="Start match").click()
     await page.wait_for_function("window.__imai.create !== null")
 
@@ -171,7 +179,8 @@ async def run(args, spec):
                           else browser.new_page(viewport=dict(width=640, height=360), device_scale_factor=1))
             await page.add_init_script(path=str(INJECT))
             await page.add_init_script(script=f"({GRAPHICS})()")
-            await start_solo(page, spec.team, args.alliance)
+            start = bot_start(spec, args.alliance) if args.pro_start else None
+            await start_solo(page, spec.team, args.alliance, start=start)
             await page.set_viewport_size(dict(width=320, height=180))
             return await drive(page, spec, args.alliance, args.out, run_id,
                                driver=args.driver, latency_mode=args.latency, calibration=args.calibrate)
@@ -196,6 +205,7 @@ def main():
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--cdp", metavar="URL", help="attach to an already-running Chrome, e.g. http://127.0.0.1:9222")
     parser.add_argument("--driver", choices=("python", "page"), default="python")
+    parser.add_argument("--pro-start", action="store_true", help="override the match start pose from the team's pro auto route")
     parser.add_argument("--calibrate", type=int, default=6, metavar="N")
     parser.add_argument("--latency", type=latency_arg, default="auto", metavar="auto|MS")
     parser.add_argument("--out", type=Path, default=ROOT / "data" / "live")

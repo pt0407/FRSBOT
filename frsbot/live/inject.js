@@ -22,7 +22,7 @@
     pad: { axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0, touched: false })), timestamp: 0 },
     frames: [], inputs: [], polls: [], events: [], latencies: [], waitingPoll: [], waitingInput: [], waitingFrame: [],
     seq: 0, writeSeq: 0, frameCount: 0, pollCount: 0, inputCount: 0,
-    driver: null, driverCount: 0, driverStatus: null,
+    driver: null, driverCount: 0, driverStatus: null, start: null,
     create: null, ready: null, error: null, fieldRelativeError: false, ended: false, blocked: document.hidden,
     decode,
     frameTick(frame) { return Math.round((frame.view.phase === 'countdown' ? -frame.view.clock : frame.view.elapsed) * 60); },
@@ -92,6 +92,7 @@
       this.postMessage = (m, ...args) => {
         const at = performance.now();
         if (m.t === 'create') {
+          if (api.start && m.start) Object.assign(m.start, api.start);
           api.create = { at, ...plain(m) };
           ring(api.events, api.create);
           api.ended = false;

@@ -21,11 +21,17 @@ class ImAI:
         if PARAMS["learned_hint"]:
             from frsbot.imitation.learned_hint import load, make_hint
             self.hint = make_hint(load(), self.planner, PARAMS["hint_threshold"])
+        self.auto = None
+        if PARAMS["pro_auto"]:
+            from frsbot.bot.auto_route import AutoRoute
+            self.auto = AutoRoute.for_team(spec)
 
     def act(self, state: GameState) -> Inputs:
         if state.phase in (Phase.COUNTDOWN, Phase.SETTLE, Phase.DONE):
             self.goal = self.planner.plan(state)
             return Inputs(field_relative=True)
+        if self.auto is not None and state.t < 20.0:
+            return self.auto.act(state)
         robot = state.robots[state.me]
         if self.collect_target:
             collecting = state.t < self.collect_until or (robot.hopper < self.collect_target and state.t < self.collect_deadline)

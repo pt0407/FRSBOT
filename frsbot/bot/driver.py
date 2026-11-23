@@ -157,7 +157,8 @@ class Driver:
         final_waypoint = math.dist(point, target) < .01
         vmax = self.spec.max_speed
         # Conservative stopping distance also leaves room for the engine's velocity response.
-        speed = min(vmax, 2 * distance, math.sqrt(2 * self.spec.accel * .4 * max(0, distance - .12)))
+        speed = min(vmax, PARAMS["drive_dist_gain"] * distance,
+                    math.sqrt(2 * self.spec.accel * PARAMS["drive_brake_frac"] * max(0, distance - .12)))
         if goal.kind == "Collect":
             if distance < 1:
                 speed = min(speed, vmax * PARAMS["collect_near_frac"])
