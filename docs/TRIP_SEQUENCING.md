@@ -127,3 +127,13 @@ Default stays 0 (off).
 
 Replay event log check (pro CLHNB666, 1250): 1075 points scored while blue was active, 175 while inactive,
 all within about 4 s of deactivation (the grace period). The late stationary drops in S1 and S3 score nothing.
+
+## Learned input policy (closed-loop result)
+
+`frsbot/imitation/input_policy.py`: state + spec -> sticks and intake/score, trained on 18 recovered pro
+replays, held out 4. Held-out stick MSE 0.041 vs 0.155 for predicting zero; button accuracy 0.781 vs 0.698
+majority. Closed-loop in the sim on team 2910 (6 cases): mean 11.0 vs about 517 for the current bot.
+
+The policy fails in closed loop. Small per-frame errors compound and the bot stops scoring. Not promoted.
+Next step if pursued: DAgger-style training on the bot's own visited states, labelled by the pro-recovered
+inputs, or a hybrid where the planner picks goals and the network only supplies stick corrections.
