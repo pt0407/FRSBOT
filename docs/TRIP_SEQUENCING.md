@@ -105,3 +105,16 @@ Full protocol on teams 2910 and 4414 (both alliances, seeds 1-3): moving score o
 `trip_sequencing=1, trip_shift_aware=1, trip_fill=1.0`: mean 545.2 vs baseline 530.2 (+15.0).
 Per team: 254 629.2 (+28.7), 2910 513.3 (-3.5), 1114 616.5 (+5.3), 4414 667.8 (+18.3), 60026 299.3 (+26.5).
 No team fell more than 20 points, but the mean gain misses the +40 gate. Not promoted; flag stays off.
+
+## Hub-state comparison and score-earlier test
+
+Pro CLHNB666 (1250) with the game's own schedule (`is_active`, firstInactive=blue): hub active in auto,
+transition, S2, S4, endgame; inactive in S1 and S3. The pro releases 176 FUEL in auto, 97 in transition,
+about 250-320 per active shift, and 0 while inactive. In S1 and S3 it intakes about 150 FUEL per shift
+instead. The bot's odometry shows it stopped about 70% of S1 and S3.
+
+Bot hub state is computed from the same schedule, not measured per frame.
+
+`active_score_frac=0.3` (score when the hopper reaches 30% during active hub time) on the full protocol:
+mean 454.3 vs 530.2 baseline (254 512.0, 2910 408.7, 1114 537.0, 4414 537.8, 60026 276.2). Much worse.
+Scoring earlier is not the fix. Default remains 0.85.
