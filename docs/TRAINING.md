@@ -55,6 +55,11 @@ The report includes overall and contact-excluded endpoint error. Geometry flags 
 field wall/hub overlap, and a speed stall in ground FUEL. The contact-excluded metric drops a segment if any
 robot has a flag. No detected contact is not proof of a search failure.
 
+PR #2 validation ran every eligible two-second segment across eight workers: 45 solo replays and 11
+passive multiplayer captures, yielding 4,322 segments and 321,180 robot/control examples. Planar
+endpoint median / p90 was 2.35 / 24.81 cm overall and 1.78 / 24.48 cm excluding contact-flagged
+segments. Exact hopper match was 43.6% at reset and 18.6% at the endpoint, below the 80% target.
+
 ## 2. Goal labelling
 
 From states alone, label each pro segment as Collect(cluster), Score(spot) or Stage(spot). Local pickups and hopper
