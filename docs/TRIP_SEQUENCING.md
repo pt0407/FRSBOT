@@ -144,3 +144,22 @@ The engine reports capacity 47 for team 2910, matching the spec's hopper figure.
 within the 55 total capacity. `use_total_capacity=1` (planner uses the total) on the full protocol: mean
 506.5 vs 530.2 baseline (254 551.2, 2910 434.8, 1114 587.2, 4414 685.5, 60026 273.7). Worse, mainly on 2910.
 Capacity is not the cause. Default stays 0.
+
+## Handoff: open items (auto mimic and 20 s handoff)
+
+State:
+- `frsbot/tools/auto_mimic.py` replays the recovered pro controls for 0-20 s (team 2910, CLHNB666), then ImAI.
+  Blue uses the pro start; red uses the 180-degree mirror.
+- Same start, six cases: baseline 509.0 final, mimic 499.5 final. Score at 20 s: 51.8 baseline, 80.5 mimic.
+  Within noise over the full match. Not promoted.
+- Capacity check and total-capacity knob: not the cause (506.5 vs 530.2). Default off.
+
+Open:
+- Handoff at 20 s. Baseline releases about 31 FUEL just before the blue hub closes and scores 40 more in the
+  next three seconds. The mimic loses 13 FUEL at about 20 s but gains 1 point. Hypothesis: the mimic's last release
+  lands after the hub closes. Check: compare score-event times in milliseconds with the pro's 0-20 s events in
+  `data/telemetry/ljqj1ukg3mnpcxvl.json` (event list has `score` events with `alliance`, `points`, `at`).
+- Start pose: the engine clamps starts, leaving about 0.44 m of offset to the pro's start.
+
+Shared resources: one live run at a time on the debug Chrome (port 9222). Use a separate branch or worktree
+for parallel work.
