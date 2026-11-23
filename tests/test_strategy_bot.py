@@ -36,14 +36,46 @@ def force(bot, role):
     bot.layer.role = lambda observation: role
 
 
-def test_solo_identical_to_imai(specs):
+def team_state(*args, **kwargs):
+    s = state(*args, **kwargs)
+    s.robots.extend([replace(r, id=r.id + 2, z=-3.) for r in s.robots])
+    return s
+
+
+@pytest.mark.parametrize("alliance", ["blue", "red"])
+@pytest.mark.parametrize("opponents", [0, 1, 3])
+def test_no_teammates_identical_to_imai(specs, monkeypatch, alliance, opponents):
     original, strategic = ImAI(specs[254]), StrategicImAI(specs[254])
+
+    def unexpected(*args):
+        pytest.fail("strategy must not run without teammates")
+
+    monkeypatch.setattr(strategic.layer, "observe", unexpected)
+    monkeypatch.setattr(strategic.driver, "guard", unexpected)
+    monkeypatch.setattr(strategic.driver, "act", unexpected)
     for t in (-1., 0., .1, 1., 10., 25., 40., 60., 100., 140., 160., 163., 166.):
         s = state(t)
-        s.robots = s.robots[:1]
+        me = replace(s.robots[0], alliance=alliance)
+        other = "red" if alliance == "blue" else "blue"
+        s.robots = [replace(s.robots[1], id=i + 1, alliance=other, x=me.x+.5) for i in range(opponents)] + [me]
+        s.me = opponents
         s.fuel = state(fuel=[[-5., .075, 2.], [-4.8, .075, 2.]]).fuel
         assert strategic.act(s) == original.act(s)
         assert strategic.goal == original.goal
+
+
+@pytest.mark.parametrize("size", [2, 3])
+def test_teammates_keep_strategy_enabled(specs, monkeypatch, size):
+    bot = StrategicImAI(specs[254])
+    s = team_state()
+    if size == 3:
+        s.robots.extend([replace(r, id=r.id + 4, z=3.) for r in s.robots[:2]])
+    observed = []
+    monkeypatch.setattr(bot.layer, "observe", lambda state: observed.append(state))
+    force(bot, Role("Defender", 1))
+    bot.act(s)
+    assert observed == [s]
+    assert bot.goal.kind == "Defend"
 
 
 def test_default_off_planner_deconfliction(specs):
@@ -63,7 +95,7 @@ def test_default_off_planner_deconfliction(specs):
 def test_scorer_replaces_cached_occupied_slot_and_evades_away(specs):
     bot = StrategicImAI(specs[254])
     force(bot, Role("Scorer"))
-    s = state()
+    s = team_state()
     s.robots[0].hopper = 70
     spot = bot.scorer.planner.score_spot(s)
     bot.scorer.goal = bot.scorer.planner.goal = Goal("Score", spot)
@@ -74,7 +106,7 @@ def test_scorer_replaces_cached_occupied_slot_and_evades_away(specs):
     bot.layer.teammate_slots = lambda observation: []
     bot.layer.defended_by = lambda observation: 1
     bot.layer.evasion = lambda observation: "alternate_slot"
-    s = state(60.1)
+    s = team_state(60.1)
     s.robots[0].hopper = 70
     bot.act(s)
     assert abs(bot.scorer.planner.score_offset) == math.pi / 6
@@ -84,7 +116,7 @@ def test_scorer_replaces_cached_occupied_slot_and_evades_away(specs):
 def test_defend_screen_points_bounds_hubs_lanes_and_no_score(specs):
     bot = StrategicImAI(specs[254])
     force(bot, Role("Defender", 1))
-    s = state()
+    s = team_state()
     for x in np.linspace(-8, 8, 9):
         for z in np.linspace(-3.9, 3.9, 7):
             for hopper in (0, 10):
@@ -95,7 +127,7 @@ def test_defend_screen_points_bounds_hubs_lanes_and_no_score(specs):
                 assert not any(inside(point, box, pad) for box in LANE_BOXES)
                 assert all(not inside(point, (cx-.597, cx+.597, cz-.597, cz+.597), pad)
                            for cx, cz, _ in HUB_CENTRES.values())
-    assert not bot.act(state()).score
+    assert not bot.act(team_state()).score
     assert bot.goal.kind == "Defend"
     assert NEW_GOAL_KINDS == ("Defend", "Contest", "Feed")
 
@@ -104,14 +136,14 @@ def test_pin_guard_retreat_and_clear_interval(specs):
     bot = StrategicImAI(specs[254])
     force(bot, Role("Defender", 1))
     for t in (60., 60.5, 61.):
-        s = state(t)
+        s = team_state(t)
         s.robots[0].x = 5.4
         bot.act(s)
         assert (bot.driver.retreat_target is not None) == (t >= 61)
     point = bot.driver.retreat_point
     assert math.dist(point, (s.robots[1].x, s.robots[1].z)) > fouls.PIN_CLEAR_DISTANCE_METERS + .1
     for t in (61.1, 62.7, 62.9):
-        s = state(t)
+        s = team_state(t)
         s.robots[0].x = 1.
         bot.act(s)
         assert (bot.driver.retreat_target is not None) == (t < 62.9)
@@ -121,7 +153,7 @@ def test_pin_guard_retreat_and_clear_interval(specs):
 def test_no_defend_or_contest_in_auto(specs, role):
     bot = StrategicImAI(specs[254])
     force(bot, role)
-    bot.act(state(10., fuel=[[0., .075, 0.]]))
+    bot.act(team_state(10., fuel=[[0., .075, 0.]]))
     assert bot.goal.kind not in ("Defend", "Contest")
 
 
@@ -153,7 +185,7 @@ def test_g408_near_either_hub(specs, kind, alliance):
 def test_endgame_tower_falls_back_to_scorer(specs):
     bot = StrategicImAI(specs[254])
     force(bot, Role("Defender", 1))
-    s = state(140.)
+    s = team_state(140.)
     s.robots[1].x, s.robots[1].z = fouls.TOWER_CENTRES["red"]
     bot.act(s)
     assert bot.goal.kind != "Defend"
@@ -177,21 +209,21 @@ def test_all_kind_avoidance_and_paired_lane(specs):
 def test_contest_target_feed_release_and_empty_fallback(specs):
     bot = StrategicImAI(specs[254])
     force(bot, Role("Contester"))
-    s = state(fuel=[[0., .075, 1.]] * 4 + [[2., .075, -1.]] * 4)
+    s = team_state(fuel=[[0., .075, 1.]] * 4 + [[2., .075, -1.]] * 4)
     s.robots[1].x, s.robots[1].z, s.robots[1].vx = 1., -1., 1.
     bot.act(s)
     assert bot.goal == Goal("Contest", (2., -1.))
     bot = StrategicImAI(specs[254])
     force(bot, Role("Feeder"))
-    s = state(60.1)
+    s = team_state(60.1)
     s.robots[0].hopper = 60
     bot.act(s)
     assert bot.goal.kind == "Feed"
-    s = state(60.2)
+    s = team_state(60.2)
     s.robots[0].hopper = 60
     s.robots[0].x, s.robots[0].z = bot.goal.point
     assert bot.act(s).score
-    s = state(60.3)
+    s = team_state(60.3)
     s.robots[0].hopper = 0
     bot.act(s)
     assert bot.goal.kind not in ("Feed", "Contest")
@@ -232,7 +264,9 @@ def test_defender_engine_smoke(specs, capsys):
     for defended in (False, True):
         with WasmEnv() as env:
             env.reset(robots=[RobotSlot(team=254, alliance="blue", start=dict(fx=1.5, fy=2, headingDeg=0)),
-                       RobotSlot(team=2910, alliance="red", start=dict(fx=15, fy=2, headingDeg=0))], seed=7)
+                       RobotSlot(team=2910, alliance="red", start=dict(fx=15, fy=2, headingDeg=0)),
+                       RobotSlot(team=254, alliance="blue", start=dict(fx=1, fy=7, headingDeg=0)),
+                       RobotSlot(team=2910, alliance="red", start=dict(fx=15, fy=7, headingDeg=0))], seed=7)
             states = env.step({}, 1500).views
             bot, opponent = StrategicImAI(specs[254]), ImAI(specs[2910])
             force(bot, Role("Defender", 1))
@@ -243,7 +277,7 @@ def test_defender_engine_smoke(specs, capsys):
                 if defended:
                     inputs[0] = bot.act(states[0])
                 states = env.step(inputs, 3).views
-                a, b = states[0].robots
+                a, b = states[0].robots[:2]
                 minimum_distance = min(minimum_distance, math.hypot(a.x-b.x, a.z-b.z))
             after = env.observation.driver[1]["scored"]
             fouls_by_me = env.observation.driver[0]["fouls"]

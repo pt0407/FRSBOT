@@ -97,8 +97,12 @@ class StrategicImAI:
         return self.driver.guard(inputs, self.goal, state)
 
     def act(self, state) -> Inputs:
-        self.layer.observe(state)
         me = state.robots[state.me]
+        if not any(r.id != me.id and r.alliance == me.alliance for r in state.robots):
+            inputs = self.scorer.act(state)
+            self.goal = self.scorer.goal
+            return inputs
+        self.layer.observe(state)
         planner = self.scorer.planner
         planner.avoid_points = self.layer.teammate_targets(state)
         planner.avoid_slots = self.layer.teammate_slots(state)
