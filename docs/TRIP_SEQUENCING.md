@@ -163,3 +163,10 @@ Open:
 
 Shared resources: one live run at a time on the debug Chrome (port 9222). Use a separate branch or worktree
 for parallel work.
+
+## Closed-loop auto (route follow, not open-loop replay)
+
+`frsbot/tools/auto_closed.py`: the driver follows the aligned pro route for 0-20 s, with a Score goal at the
+scoring spot when the pro sheds FUEL. Six cases (team 2910, both alliances, seeds 1-3): final mean 455.0,
+score at 20 s mean 5.0. The route follow alone scored 438.7 (@20s 5.0). The open-loop mimic scored 499.5
+(@20s 80.5). The closed-loop variant does not reproduce the pro's auto scoring, so it is not promoted.
