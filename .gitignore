@@ -6,4 +6,5 @@ data/sim/imai/
 data/sim/strategy/
 data/raw_mp/
 data/imitation/
+data/live/
 data/cache/

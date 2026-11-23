@@ -34,6 +34,51 @@ Chrome page ──(state tap)──► bridge.py ──GameState──► ImAI.a
 
 ## 2. Latency
 
+Implemented solo CLI examples (milliseconds on the command line; seconds inside `predict`):
+
+```sh
+python3 -m frsbot.live.bridge --team 254 --driver python --latency auto --calibrate 6
+python3 -m frsbot.live.bridge --team 254 --driver page --latency auto --calibrate 6
+python3 -m frsbot.live.bridge --team 254 --latency 100 --calibrate 0
+```
+
+`--latency 0` disables prediction; `--calibrate 0` skips physical tests. Calibration
+alternates forward and turn steps from rest early in auto, zeroing and waiting for
+settling between steps. Thresholds are 0.08 m/s or 0.008 radians; unsuccessful attempts
+are reported, not treated as zero latency. All timestamps share the page's monotonic
+`performance.now()` clock. Summary tick equivalents use 60 Hz; physical samples also
+report the actual observed-to-effect engine tick delta, which can differ during bursts.
+
+The tap associates command writes with the next gamepad poll, next input send, and first
+subsequently received frame. Superseded writes are retained in the log but excluded from
+transport percentiles. A first received frame is **not** an acknowledgment of application:
+it may already have been queued by the worker. Physical response and transport timings
+are intentionally separate. Auto prediction starts with the measured physical median,
+then adjusts by changes in the latest 120 sampled write-to-frame timings (bounded 0–1 s).
+Without calibration it uses that transport median alone.
+
+The predictor reuses drive shaping, acceleration and turn-acceleration constants; it
+models holonomic field-relative translation without contacts, slip or battery dynamics.
+Tests bound 50/100/150-ms held-input rollouts from rest to 12 cm and 0.15 radians. The
+legacy model's turn acceleration is an assumption, not a newly fitted engine parameter.
+Other robots use CV capped at 0.3 s. FUEL code 1 is ballistic, with velocity estimated
+from consecutive same-code observations; code 0 and attached/staged codes are unchanged.
+The first observation has no FUEL velocity history and assumes zero velocity. No fields
+were added to core types: observation history travels as private live-only attributes.
+Hub timing uses `core.field`; immediately before the native auto-winner decision at
+t=23, a prediction into transition reports t=33 as the next *possible* toggle until
+`firstInactive` is published, rather than guessing the winner.
+
+`--driver page` loads the merged upstream `driver.mjs` unchanged, omitting only Node
+imports and its CLI at load time. Every gamepad poll runs that Driver against the latest
+tapped frame, with short-horizon prediction. Python runs unchanged `ImAI.act` in a worker
+thread at about 4 Hz with a goal-capturing driver adapter, preserving planning, collect
+targets/deadlines, arrival/validity checks and abandonment logic. Actual recovery stays
+in the JS Driver. Abandonment is latched until delivered to the planner. Deliberate
+differences: goal decisions/abandon handling can lag by a planner interval; route/driver
+state updates follow render polls rather than Python acts. Missing/stale goals or frames
+zero the pad; focus/error/end safety remains in the tap. See [LIVE_RUNS](LIVE_RUNS.md).
+
 - **Measure it.**
   - `ping` messages give the round-trip time online. Solo latency is the worker's message lag plus the gamepad
     poll period.
