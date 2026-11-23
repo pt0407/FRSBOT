@@ -81,3 +81,10 @@ the proposed design is still missing, and that is the part that would need to be
 `trip_shift_aware=1` limits the Collect commitment to hub-inactive time. Six-case screens: team 2910 511.3
 (baseline 516.8), team 4414 643.7 (baseline 649.5). Both slightly below baseline, so the acceptance gate
 (+40 over 530.2 on the full protocol) is not met. The commit rule alone does not raise collection volume.
+
+## Cluster sweep width (flag-free knobs, defaults unchanged)
+
+`sweep_min_m` (default 0.6) and `sweep_scale` (default 0.8) set how many FUEL balls a cluster counts.
+Full-protocol six-case screens: team 4414 `sweep_min_m=1.0` 650.2 (baseline 649.5), `sweep_scale=1.2` 664.0.
+Team 2910 `sweep_min_m=1.0` 502.0 and `sweep_scale=1.2` 501.7 (baseline 516.8). No setting clears the
+acceptance gate, so defaults stay unchanged.

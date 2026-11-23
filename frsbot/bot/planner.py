@@ -96,7 +96,7 @@ class Planner:
         cells, inverse = np.unique(np.floor(points / .5).astype(int), axis=0, return_inverse=True)
         counts = np.bincount(inverse)
         centres = np.column_stack([np.bincount(inverse, weights=points[:, i]) / counts for i in (0, 1)])
-        sweep = max(.6, self.spec.bumper_width * .8)
+        sweep = max(PARAMS["sweep_min_m"], self.spec.bumper_width * PARAMS["sweep_scale"])
         balls = (np.sum((centres[:, None, :] - points[None, :, :]) ** 2, axis=2) <= sweep ** 2).sum(axis=1)
         dx, dz = centres[:, 0] - robot.x, centres[:, 1] - robot.z
         travel = np.hypot(dx, dz) / self.spec.max_speed
