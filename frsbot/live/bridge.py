@@ -137,6 +137,7 @@ async def drive(page, spec, alliance, output, run_id, timeout=300, driver="pytho
         await page.screenshot(path=str(screenshot), full_page=True)
         seconds = (packet["received"] - baseline["received"]) / 1000
         result = dict(team=spec.team, alliance=alliance, seed=packet["create"]["seed"],
+                      create=packet["create"], ready=packet["ready"],
                       driver=driver, latency_mode=latency_mode, latency=timing.summary(),
                       start=packet["create"]["start"], final_score=last["score"], in_game_score_text=text,
                       frames_per_second=(packet["frameCount"] - baseline["frameCount"]) / seconds,
