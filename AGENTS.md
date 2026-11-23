@@ -81,3 +81,15 @@ locally. `fetch_mp` downloads those releases. Only `rankedLive`/`rankedWatch` ar
 - Don't use a ranked or online room with the bot without checking the game's rules first.
 - Driver name `404` is the owner's account. Its replays are excluded from training data.
 - auto plays like teleop; climbing is rare and not a priority
+
+## Current status: live singleplayer score
+
+- Best live singleplayer runs: 626 (team 254) and 608 (team 4414) with `run_imai.command`. Target 1200 is not reached.
+- Offline 30-case baseline on this machine: 530.2 mean. Team means: 254 600, 1114 611, 2910 517, 4414 650, 60026 273.
+- Every tuning knob in `frsbot/bot/tuning.py` defaults to the shipped value. Sweeps on the 6-case
+  screens (team 4414 and 2910) and the full protocol did not beat baseline by a meaningful margin:
+  stage fullness, arrival margin, intake gate, scoring trigger, cluster bias, and the learned hint.
+- Limit found: collection volume and trip sequencing, not stalls or constants. The pro collects about
+  1390 FUEL in a match on the same family; the bot collects about 600. Shooter fire rate caps 4414 at 14.
+- The learned event model (`frsbot/imitation/pro_planner.py`) predicts the next second well on held-out
+  replays (80% event accuracy, 0.62 m pose error), but overriding goals with it lowered scores.
