@@ -61,7 +61,9 @@ def view_to_state(view: dict, freeplay: bool = False) -> GameState:
     )
 
 
-class WasmEnv:
+class JsonWasmEnv:
+    """Original one-robot JSON-lines backend (server.mjs); kept as the benchmark baseline and protocol reference."""
+
     def __init__(self, engine_dir: Path = ENGINE_DIR, node: str | None = None, timeout: float = 120):
         self.engine_dir = Path(engine_dir)
         self.node = node
@@ -72,6 +74,7 @@ class WasmEnv:
         self.build = None
         self._buffer = b""
         self._freeplay = False
+        self.driver = {}
 
     def _spawn(self):
         if not (self.engine_dir / "manifest.json").is_file():
@@ -105,15 +108,18 @@ class WasmEnv:
         self.engine, self.build = response.get("engine"), response.get("build")
         if "view" in response:
             self.view = response["view"]
+        self.driver = response.get("driver", {})
         return response.get("view")
 
     def reset(self, team: int, alliance: str = "blue", start: dict | None = None, seed: int = 1,
               auto: str = "none", event: str = "event", hp: bool = True, unload: bool = True,
-              freeplay: bool = False, countdown: bool = False) -> GameState:
+              freeplay: bool = False, countdown: bool = False, driver: dict | None = None) -> GameState:
+        """`driver` (frsbot.sim.ipc.driver_config(spec)) lets step() take a planner Goal for the JS driver."""
         if self.process is None:
             self._spawn()
         self._request("new", config=dict(team=team, alliance=alliance, start=start if start is not None else dict(fx=0, fy=0, headingDeg=0),
-                                         seed=seed, auto=auto, event=event, hp=hp, unload=unload, freeplay=freeplay))
+                                         seed=seed, auto=auto, event=event, hp=hp, unload=unload, freeplay=freeplay),
+                      drivers={"0": driver} if driver else {})
         self._freeplay = freeplay
         return view_to_state(self._request("start", countdown=countdown), freeplay)
 
@@ -122,10 +128,13 @@ class WasmEnv:
             raise RuntimeError("call reset before stepping")
         if isinstance(ticks, bool) or not isinstance(ticks, int) or not 1 <= ticks <= 60000:
             raise ValueError("ticks must be an integer in [1, 60000]")
+        robot = next((r for r in self.view["robots"] if r.get("local")), self.view["robots"][0])
+        if hasattr(inputs, "kind"):  # planner Goal: the JS driver acts every tick
+            return view_to_state(self._request("step", goals={str(robot["id"]): dict(kind=inputs.kind, point=list(inputs.point))},
+                                               n=ticks), self._freeplay)
         raw = asdict(inputs)
         raw["fieldRelative"] = raw.pop("field_relative")
         raw.pop("seq")
-        robot = next((r for r in self.view["robots"] if r.get("local")), self.view["robots"][0])
         return view_to_state(self._request("step", inputs={str(robot["id"]): raw}, n=ticks), self._freeplay)
 
     def state(self) -> GameState:
@@ -152,6 +161,86 @@ class WasmEnv:
                 self.process.wait(timeout=5)
         finally:
             self._terminate()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+class WasmEnv:
+    """Real-engine matches over the binary protocol (vec_server.mjs). One match; one to six robots.
+
+    `reset(team, ...)` keeps the original one-robot call; `reset(robots=[RobotSlot(...)], ego=i, seed=...)` makes a
+    multi-robot match and returns robot i's GameState. `step(Inputs | Goal, ticks)` drives the ego robot and returns
+    its GameState; `step({i: Inputs | Goal | None}, ticks)` returns a StepResult with every robot's view, alliance
+    scores and breakdowns. Robots without an action use their RobotSlot.policy (idle when None).
+    `latency=(lo, hi)` delays observations by U(lo, hi) seconds and holds inputs for 1-3 ticks, drawn per episode.
+    """
+
+    def __init__(self, engine_dir: Path = ENGINE_DIR, node: str | None = None, timeout: float = 120,
+                 latency=None):
+        self.engine_dir, self.node, self.timeout, self.latency = Path(engine_dir), node, timeout, latency
+        self.vec = None
+        self.engine = self.build = None
+        self.observation = None
+
+    @property
+    def process(self):
+        return self.vec.workers[0].worker.engine.process if self.vec and self.vec.workers else None
+
+    @property
+    def view(self) -> dict | None:
+        return self.observation.view() if self.observation else None
+
+    @property
+    def delay_ticks(self) -> int:
+        return self.vec.latencies[0][0] if self.vec else 0
+
+    @property
+    def hold_ticks(self) -> int:
+        return self.vec.latencies[0][1] if self.vec else 1
+
+    def reset(self, team: int | None = None, alliance: str = "blue", start: dict | None = None, seed: int = 1,
+              auto: str = "none", event: str = "event", hp: bool = True, unload: bool = True,
+              freeplay: bool = False, countdown: bool = False, robots: list | None = None, ego: int = 0) -> GameState:
+        from frsbot.sim.vec_env import RobotSlot, VecWasmEnv
+        if robots is None:
+            if team is None:
+                raise ValueError("reset needs a team or robots=[RobotSlot(...)]")
+            robots = [RobotSlot(team, alliance, start if start is not None else dict(fx=0, fy=0, headingDeg=0))]
+        if self.vec is None:
+            if not (self.engine_dir / "manifest.json").is_file():
+                raise FileNotFoundError("engine assets missing; run python3 -m frsbot.sim.engine.fetch")
+            self.vec = VecWasmEnv(1, 1, self.engine_dir, self.node, self.timeout, self.latency, processes=False)
+            self.engine, self.build = self.vec.engine, self.vec.build
+        state = self.vec.reset([dict(robots=robots, ego=ego, seed=seed, auto=auto, event=event, hp=hp, unload=unload,
+                                     freeplay=freeplay, countdown=countdown)])[0]
+        self.observation = self.vec.observations[0]
+        return state
+
+    def step(self, inputs, ticks: int = 1):
+        if self.observation is None:
+            raise RuntimeError("call reset before stepping")
+        if isinstance(ticks, bool) or not isinstance(ticks, int) or not 1 <= ticks <= 60000:
+            raise ValueError("ticks must be an integer in [1, 60000]")
+        ego = self.vec.egos[0]
+        actions = inputs if isinstance(inputs, dict) else {ego: inputs}
+        result = self.vec.step([actions], ticks)[0]
+        self.observation = result.observation
+        return result if isinstance(inputs, dict) else result.views[ego]
+
+    def state(self) -> GameState:
+        if self.observation is None:
+            raise RuntimeError("call reset before using WasmEnv")
+        self.observation = self.vec.state(0)
+        return self.observation.state(self.vec.egos[0])
+
+    def close(self):
+        if self.vec is not None:
+            self.vec.close()
+        self.vec, self.observation = None, None
 
     def __enter__(self):
         return self
