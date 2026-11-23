@@ -37,6 +37,16 @@ class ImAI:
                     return self.driver.act(self.goal, state)
             self.collect_target = 0
         arrived = self.goal is not None and self.goal.kind == "Collect" and math.hypot(robot.x - self.goal.point[0], robot.z - self.goal.point[1]) < .3
+        if PARAMS["trip_sequencing"] and robot.hopper < PARAMS["trip_fill"] * self.planner.capacity(state) \
+                and state.t + self.planner.score_time(state) + 5 < 163:
+            if self.goal is None or self.goal.kind != "Collect" or arrived or not self.planner.valid(self.goal, state):
+                clusters = self.planner.clusters(state)
+                if clusters:
+                    self.goal = Goal("Collect", clusters[0][1])
+                    self.planner.goal = self.goal
+                    self.next_plan = state.t + PARAMS["replan_s"]
+            if self.goal is not None and self.goal.kind == "Collect":
+                return self.driver.act(self.goal, state)
         if state.t >= self.next_plan or arrived or not self.planner.valid(self.goal, state):
             hinted = self.hint(state) if self.hint else None
             self.goal = hinted or self.planner.plan(state)

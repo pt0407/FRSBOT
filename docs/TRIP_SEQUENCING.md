@@ -68,3 +68,10 @@ Only if the gate passes: one live singleplayer run per tested team, reported as-
 - Is 1200 reachable with the current drive and intake model, or does the robot need faster intake
   cycles? Unknown until the offline gate is run.
 - Which robot to target first. Team 2910 has the fastest shooter (32) but the smallest hopper (47).
+
+## First implementation result (flag off by default)
+
+`trip_sequencing=1`: commit to Collect until the hopper reaches `trip_fill` (0.85) of capacity, then return
+to the normal planner. Six-case screens: team 2910 151.5 (baseline 516.8), team 4414 438.8 (baseline 649.5).
+Far worse on both. The simple commit rule starves the scoring cadence; the shift-aware timing in step 2 of
+the proposed design is still missing, and that is the part that would need to be tested next.
