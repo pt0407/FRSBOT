@@ -94,3 +94,8 @@ acceptance gate, so defaults stay unchanged.
 `collect_arrive_m` sets how close the bot must get to a cluster before it re-plans. Full-protocol six-case
 screens: team 4414 0.8 m gave 633.3 and 1.5 m gave 654.7 (baseline 649.5). Team 2910 0.8 m gave 525.0 and
 1.5 m gave 507.3 (baseline 516.8). All changes are within screen noise, so the default stays at 0.3 m.
+
+## Shoot while collecting (existing flag, unchanged default)
+
+Full protocol on teams 2910 and 4414 (both alliances, seeds 1-3): moving score on gave 516.8 (2910) and
+649.5 (4414); off gave 516.8 and 651.3. No meaningful difference, so the default stays as shipped.
