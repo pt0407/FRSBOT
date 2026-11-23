@@ -92,6 +92,19 @@ def test_vec_matches_are_independent_and_deterministic():
 
 
 @needs_engine
+def test_rollout_runs_each_match_to_the_requested_time():
+    with VecWasmEnv(2, 2) as env:
+        env.reset([dict(robots=[RobotSlot(254, policy=GoalImAIPolicy(SPECS[254]))], seed=s) for s in (1, 2, 1, 2)])
+        env.step([{}], 7, matches=[1])
+        results = env.rollout(20, 6)
+        assert [r.t for r in results] == [20, 20, 20, 20]
+        assert results[0].views[0].robots == results[2].views[0].robots and results[0].scores["blue"] > 0
+        assert env.rollout(20, 6, matches=[3])[0].t == 20
+        with pytest.raises(ValueError):
+            env.rollout(30, 0)
+
+
+@needs_engine
 def test_latency_delays_observations_and_holds_inputs():
     with WasmEnv(latency=(.1, .1)) as env:
         state = env.reset(254, seed=5)

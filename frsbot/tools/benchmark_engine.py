@@ -6,7 +6,8 @@
 Steps (cumulative): baseline = Python ImAI over JSON lines (server.mjs), acting every 3 ticks like evaluate.py;
 1 = JS driver every tick in the engine process, Python planner every --decide ticks, still JSON;
 2 = same over the binary protocol (vec_server.mjs); 3 = VecWasmEnv, --workers Node workers x --per-worker matches,
-policies batched in one Python process; 3x6 = step 3 with 6 robots per match (all rule ImAI).
+slot policies run in each worker's own Python process via VecWasmEnv.rollout (--lockstep: VecWasmEnv.step, one
+barrier per decision as with central batched inference); 3x6 = step 3 with 6 robots per match (all rule ImAI).
 Step 4 (decode cache) is timed by `python3 -m frsbot.replay.cache --benchmark`.
 """
 import argparse
@@ -92,10 +93,13 @@ def vectorised(robots_per_match, args):
                 configs.append(dict(robots=[RobotSlot(t, alliances[k], policy=GoalImAIPolicy(specs[t])) for k, t in enumerate(teams)],
                                     seed=1 + r))
             states = env.reset(configs)
-            t = states[0].t
-            while t < args.seconds:
-                results = env.step(None, min(args.decide, round((args.seconds - t) * 60)))
-                t = results[0].t
+            if args.lockstep:
+                t = states[0].t
+                while t < args.seconds:
+                    results = env.step(None, min(args.decide, round((args.seconds - t) * 60)))
+                    t = results[0].t
+            else:
+                results = env.rollout(args.seconds, args.decide)
             scores += [res.scores["blue"] for res in results]
     return time.perf_counter() - before, scores, rounds * total
 
@@ -110,6 +114,8 @@ def main():
     parser.add_argument("--matches", type=int, default=16)
     parser.add_argument("--seconds", type=float, default=166)
     parser.add_argument("--decide", type=int, default=6, help="ticks between Python decisions once the JS driver runs every tick")
+    parser.add_argument("--lockstep", action="store_true", help="step 3 via VecWasmEnv.step (barrier every decision) "
+                        "instead of VecWasmEnv.rollout")
     args = parser.parse_args()
     if args.step is None:
         return traces(args)

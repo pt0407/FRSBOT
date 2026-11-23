@@ -140,6 +140,18 @@ class _Worker:
             self.observations[obs.slot] = obs
         return observed
 
+    def rollout(self, slots, seconds: float, ticks: int):
+        """Step these slots with their slot policies only, `ticks` at a time, until each reaches `seconds`."""
+        live = [s for s in slots if self.observations[s].t < seconds]
+        while live:
+            todo = defaultdict(list)
+            for s in live:
+                todo[max(1, min(ticks, round((seconds - self.observations[s].t) * 60)))].append(s)
+            for n, group in todo.items():
+                self.step({s: {} for s in group}, n)
+            live = [s for s in live if self.observations[s].t < seconds and self.observations[s].phase != Phase.DONE]
+        return [self.observations[s] for s in slots]
+
     def state(self, slots):
         observed = self.engine.request(self.engine.send_state, slots)
         for obs in observed:
@@ -321,12 +333,30 @@ class VecWasmEnv:
         for w, observed in self._gather("step", by_worker).items():
             for obs in observed:
                 self.observations[w * self.per_worker + obs.slot] = obs
-        results = []
+        return [self._result(j) for j in indices]
+
+    def rollout(self, seconds: float, ticks: int = 6, matches: list[int] | None = None) -> list[StepResult]:
+        """Play matches with their RobotSlot policies until match time `seconds`, deciding every `ticks` ticks.
+
+        Each worker runs its matches without waiting for the others (no per-step barrier), so this is the fast path
+        for rule/replay self-play; use `step` when the caller supplies (batched) actions."""
+        indices = list(range(len(self))) if matches is None else list(matches)
+        if isinstance(ticks, bool) or not isinstance(ticks, int) or not 1 <= ticks <= 0xffff:
+            raise ValueError("ticks must be an integer in [1, 65535]")
+        by_worker = defaultdict(lambda: [[], seconds, ticks])
         for j in indices:
-            obs = self.observations[j]
-            results.append(StepResult(obs.t, {i: obs.state(i) for i in range(len(obs.robots))}, obs.scores,
-                                      obs.breakdowns, obs.phase == Phase.DONE, self.egos[j], obs))
-        return results
+            if self.observations[j] is None:
+                raise RuntimeError("call reset before stepping")
+            by_worker[j // self.per_worker][0].append(j % self.per_worker)
+        for w, observed in self._gather("rollout", by_worker).items():
+            for obs in observed:
+                self.observations[w * self.per_worker + obs.slot] = obs
+        return [self._result(j) for j in indices]
+
+    def _result(self, j: int) -> StepResult:
+        obs = self.observations[j]
+        return StepResult(obs.t, {i: obs.state(i) for i in range(len(obs.robots))}, obs.scores, obs.breakdowns,
+                          obs.phase == Phase.DONE, self.egos[j], obs)
 
     def state(self, j: int = 0) -> Observation:
         w, slot = divmod(j, self.per_worker)
