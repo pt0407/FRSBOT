@@ -2,7 +2,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const endpoint = 'wss://reefscape-ws.frsim.com/rebuilt-ws';
 const replayBase = 'https://reefscape-ws.frsim.com/rebuilt-replays';
@@ -22,7 +22,7 @@ export async function fetchReplay(id, output) {
   return target;
 }
 
-export function capture({ output, code, seconds = 210, list = false, fresh = false, mode, Socket = WebSocket, replayFetch = fetchReplay }) {
+export function capture({ output, code, seconds = 210, list = false, fresh = false, mode, Socket = WebSocket, replayFetch = fetchReplay, signal, context = {} }) {
   if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600) throw new Error('seconds must be in (0, 3600]');
   if (code && !/^[A-Z0-9]{4,12}$/.test(code)) throw new Error('invalid ranked code');
   if (mode && !['1v1', '2v2', '3v3'].includes(mode)) throw new Error('invalid mode');
@@ -43,7 +43,7 @@ export function capture({ output, code, seconds = 210, list = false, fresh = fal
     const watch = room => {
       code = room;
       target = path.join(output, `ranked-${room}-${Date.now()}.jsonl`);
-      save({ type: 'capture', version: 1, source: 'ranked', code, at: Date.now() });
+      save({ type: 'capture', version: 1, source: 'ranked', code, at: Date.now(), ...context });
       console.log(`WATCH code=${room} capture=${target}`);
       send({ t: 'rankedWatch', code: room, name: 'ImAI observer', team: 254, tab: crypto.randomUUID() });
     };
@@ -52,6 +52,7 @@ export function capture({ output, code, seconds = 210, list = false, fresh = fal
       ending = true;
       clearTimeout(deadline);
       clearTimeout(polling);
+      signal?.removeEventListener('abort', aborted);
       socket.close();
       save({ type: 'end', reason, frames, bytes, replay: replay ?? null, at: Date.now() });
       try {
@@ -68,7 +69,7 @@ export function capture({ output, code, seconds = 210, list = false, fresh = fal
         resolve({ capture: target, replay: downloaded, frames, bytes, reason });
       } catch (error) { reject(error); }
     }
-    socket.onopen = () => code ? watch(code) : send({ t: 'rankedLive' });
+    socket.onopen = () => { if (!ending) code ? watch(code) : send({ t: 'rankedLive' }); };
     socket.onmessage = event => {
       if (ending) return;
       if (typeof event.data !== 'string') {
@@ -104,6 +105,84 @@ export function capture({ output, code, seconds = 210, list = false, fresh = fal
     };
     socket.onerror = () => finish('socket-error');
     socket.onclose = () => finish('socket-closed');
+    const aborted = () => finish('batch-deadline');
+    signal?.addEventListener('abort', aborted, { once: true });
+    if (signal?.aborted) aborted();
+  });
+}
+
+export function decodeCapture(target) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('python3', ['-m', 'frsbot.replay.spectator', target],
+      { stdio: 'inherit', cwd: fileURLToPath(new URL('../../', import.meta.url)) });
+    child.on('error', reject);
+    child.on('exit', code => code === 0 ? resolve() : reject(new Error(`decode exited ${code}: ${target}`)));
+  });
+}
+
+export function batch({ output, minutes, concurrency = 2, mode, Socket = WebSocket,
+  watch = capture, decode, pollMs = 5000 }) {
+  if (!Number.isFinite(minutes) || minutes <= 0) throw new Error('minutes must be positive');
+  if (![1, 2].includes(concurrency)) throw new Error('concurrency must be 1 or 2');
+  if (mode && !['1v1', '2v2', '3v3'].includes(mode)) throw new Error('invalid mode');
+  mkdirSync(output, { recursive: true });
+  return new Promise((resolve, reject) => {
+    const started = Date.now(), until = started + minutes * 60000;
+    const seen = new Set(), active = new Map(), results = [];
+    const controller = new AbortController();
+    const browser = new Socket(endpoint);
+    let ending = false, decoding = Promise.resolve();
+    const timer = setTimeout(() => stop(), minutes * 60000);
+    const poll = setInterval(() => {
+      if (!ending && active.size < concurrency && browser.readyState === 1) list();
+    }, pollMs);
+    const list = () => browser.send(JSON.stringify({ t: 'rankedLive' }));
+    async function stop(error) {
+      if (ending) return;
+      ending = true;
+      clearTimeout(timer);
+      clearInterval(poll);
+      browser.close();
+      controller.abort();
+      await Promise.allSettled([...active.values()]);
+      try { await decoding; } catch (e) { error ??= e; }
+      const report = { started, stopped: Date.now(), minutes, concurrency, results, error: error?.message ?? null };
+      const manifest = path.join(output, `batch-${started}.json`);
+      writeFileSync(manifest, JSON.stringify(report, null, 2));
+      console.log(`BATCH_END captures=${results.length} manifest=${manifest}`);
+      if (error) reject(error); else resolve(report);
+    }
+    browser.onopen = () => { if (!ending) list(); };
+    browser.onmessage = event => {
+      if (ending) return;
+      try {
+        const message = JSON.parse(event.data);
+        if (['error', 'rankedError'].includes(message.t)) throw new Error(message.msg ?? 'ranked list error');
+        if (message.t !== 'rankedLive') return;
+        const matches = message.matches.filter(m => !mode || m.mode === mode)
+          .sort((a, b) => b.since - a.since);
+        for (const match of matches) {
+          if (active.size >= concurrency || Date.now() >= until) break;
+          const key = `${match.code}:${match.since}:${match.game}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const job = Promise.resolve().then(() => watch({ output, code: match.code,
+            seconds: Math.min(210, (until - Date.now()) / 1000), signal: controller.signal,
+            context: { mode: match.mode, rating: match.rating, game: match.game, since: match.since } }))
+            .then(result => {
+              results.push({ key, mode: match.mode, ...result });
+              if (decode && result.capture && result.frames) {
+                decoding = decoding.then(() => decode(result.capture));
+                decoding.catch(error => { void stop(error); });
+              }
+            }).catch(error => { void stop(error); })
+            .finally(() => active.delete(key));
+          active.set(key, job);
+        }
+      } catch (error) { void stop(error); }
+    };
+    browser.onerror = () => stop(new Error('batch list socket error; not retrying'));
+    browser.onclose = () => { if (!ending) void stop(new Error('batch list socket closed; not retrying')); };
   });
 }
 
@@ -113,7 +192,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const output = path.resolve(value('--output') ?? fileURLToPath(new URL('../../data/raw_mp', import.meta.url)));
   const id = value('--replay');
   try {
-    if (id) await fetchReplay(id, output);
+    if (value('--minutes') !== undefined) {
+      await batch({ output, minutes: Number(value('--minutes')), concurrency: Number(value('--concurrency') ?? 2),
+        mode: value('--mode'), decode: args.includes('--decode') ? decodeCapture : undefined });
+    }
+    else if (id) await fetchReplay(id, output);
     else {
       const result = await capture({ output, code: value('--code'), seconds: Number(value('--seconds') ?? 210), list: args.includes('--list'), fresh: args.includes('--fresh'), mode: value('--mode') });
       if (!args.includes('--list') && !result.capture) throw new Error(`no match captured (${result.reason})`);

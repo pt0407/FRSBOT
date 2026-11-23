@@ -2,7 +2,16 @@
 
 The public ranked spectator path works without signing in. No room join, queue, robot input,
 or match-control request is sent. The recorder permits only `rankedLive` and `rankedWatch`.
-It watches one match at a time; fresh-match discovery requests the list at most once every 5 s.
+Single mode watches one match at a time; fresh-match discovery requests the list at most once every 5 s.
+
+For successive captures with at most two watches, use:
+
+```sh
+~/.nvm/versions/node/v24.22.2/bin/node frsbot/scrape/spectate.mjs --minutes 60 --concurrency 2 --decode --output data/raw_mp/batch
+```
+
+This includes 1v1/2v2/3v3 by default; `--mode` restricts the mode. See
+[MATCH_ANALYSIS.md](MATCH_ANALYSIS.md) for deadline behavior, manifests, methodology and FJ5S findings.
 
 ## Record and decode
 
@@ -92,6 +101,7 @@ Checks after the final code changes:
 366 passed in 13.02s
 ```
 
-No role/defense analysis or training has been implemented at this milestone. Since ranked names
+Role/defense analysis is now available; see [MATCH_ANALYSIS.md](MATCH_ANALYSIS.md). No training
+has been implemented. Since ranked names
 are anonymized, account-level identity exclusions cannot be guaranteed from these captures alone;
 do not promote them to identity-filtered training data without a provenance policy.
