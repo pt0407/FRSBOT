@@ -1,4 +1,4 @@
-"""Download shared leaderboard replays, decode to telemetry JSON, discard the raw blob.
+"""Download shared leaderboard replays, decode to telemetry JSON, and retain the raw blob.
 
 Usage:
   python -m frsbot.scrape.harvest data/board.json
@@ -31,15 +31,18 @@ def fetch_blob(rid: str) -> bytes:
     return raw
 
 
-def process(entry: dict) -> dict:
+def process(entry: dict, retain_raw: bool = False) -> dict:
     rid = entry["replay"]
     out = TEL / f"{rid}.json"
-    if out.exists():
+    raw = RAW / f"{rid}.rbrp"
+    if out.exists() and (not retain_raw or raw.exists()):
         return {"replay": rid, "status": "cached"}
     try:
-        raw = RAW / f"{rid}.rbrp"
         blob = raw.read_bytes() if raw.exists() else fetch_blob(rid)
-        tel = telemetry(parse(blob))
+        replay = parse(blob)
+        if any(str(robot.get("name", "")).strip() in EXCLUDE_NAMES for robot in replay.robots):
+            return {"replay": rid, "status": "excluded"}
+        tel = telemetry(replay)
         tel.update({"leaderboard": {k: entry[k] for k in ("name", "team", "teams", "names", "points", "scored", "against", "at") if k in entry}})
         RAW.mkdir(parents=True, exist_ok=True)
         raw.write_bytes(blob)
@@ -73,7 +76,7 @@ def select_entries(boards):
     return list(unique.values()), excluded
 
 
-def main(board_paths, interval=1):
+def main(board_paths, interval=1, retain_raw=False):
     if interval < 1:
         raise ValueError("request interval must be at least 1 second")
     boards = [json.loads(Path(p).read_text()) for p in board_paths]
@@ -84,10 +87,10 @@ def main(board_paths, interval=1):
     results = []
     next_request = 0
     for entry in keep:
-        if not (TEL / f"{entry['replay']}.json").exists() and not (RAW / f"{entry['replay']}.rbrp").exists():
+        if (retain_raw or not (TEL / f"{entry['replay']}.json").exists()) and not (RAW / f"{entry['replay']}.rbrp").exists():
             time.sleep(max(0, next_request - time.monotonic()))
             next_request = time.monotonic() + interval
-        result = {**process(entry), "teams": entry.get("teams", [entry.get("team")])}
+        result = {**process(entry, retain_raw), "teams": entry.get("teams", [entry.get("team")])}
         results.append(result)
         if result["status"] == "error" and any(s in result["error"] for s in ("429", "503", "Connection refused")):
             break
@@ -109,5 +112,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("boards", nargs="*", default=[str(DATA / "board.json")])
     parser.add_argument("--interval", type=float, default=1)
+    parser.add_argument("--retain-raw", action="store_true", help="backfill raw files for cached telemetry")
     args = parser.parse_args()
-    main(args.boards, args.interval)
+    main(args.boards, args.interval, args.retain_raw)

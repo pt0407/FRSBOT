@@ -14,22 +14,65 @@ the driver's sticks.
 
 ## 1. Input recovery (inverse dynamics)
 
-Replays hold exact 30 Hz state but no inputs. For each pro replay:
+Solo replays sample state at 30 Hz and spectator recordings can sample at 60 Hz. Neither records inputs.
+The recovery CLI partitions each replay into non-overlapping approximately 2-second segments.
+Process workers run independent matches using the real WASM engine; they restore full body pose/velocity and
+field/air FUEL (`fo_body_set`, `fo_ball_set`) at the start of each segment, leaving preload disabled.
+The RBRP FUEL header has a ball ID and where code, but no explicit owner field; intake events identify the owner
+when available, and carried position resolves otherwise unknown IDs. A recorded `0/1 → 2` pickup labels intake,
+and `2 → 1` labels score for the previous owner. Each transfer marks a ±3 tick span, projected onto held control
+intervals; no transitions are inferred across capture gaps. These indicate observable transfers, not every press.
+Workers estimate linear, angular and ball velocity from adjacent frames. They search
+drive and turn only. A trajectory starts from observed displacement and velocity, corrects against intermediate
+simulated poses during search, and is ranked against recorded pose, angle and velocity.
+The chosen inputs are then replayed from a fresh identical reset, with no corrections or intermediate resets.
+The target is a 2-second open-loop planar endpoint error below 10 cm.
 
-1. Reset `WasmEnv` with the replay's robot, alliance, start pose and seed.
-2. For each 2-tick frame, search the inputs (x, y, turn in [-1, 1], intake/score buttons) that minimize the error
-   between the next simulated robot pose, hopper and FUEL and the replay's. Start from the previous solution plus a
-   finite-difference/CEM refinement, then set the sim robot to the replay pose (`fo_body_set`) to stop drift.
-3. Store `(GameState, Inputs, residual)`. Frames with a large residual (collisions, unknown HP effects) are flagged
-   and down-weighted.
+The numerical `data/imitation/<run>.npz` contains recorded `GameState` columns, `Inputs` and residuals for
+each robot/control interval, and a goal per robot/segment. Duration is in engine ticks; rows sharing a segment
+share the same initial reset. Archives store a per-example quality weight `exp(-pose_m / 0.10)`. Read examples as
+`(GameState, Inputs, residual, Goal)` through `frsbot.imitation.dataset.examples(path)`. Dataset and raw recordings
+are ignored by Git.
 
-Output: `data/imitation/<run>.npz`. Validation: replaying the recovered inputs open-loop for 2 s stays within 10 cm.
+```sh
+python3 -m frsbot.sim.engine.fetch
+python3 -m frsbot.scrape.harvest data/board.json --retain-raw
+node frsbot/scrape/spectate.mjs --minutes 60 --concurrency 2 --decode --output data/raw_mp/batch
+python3 -m frsbot.imitation.recover
+python3 -m frsbot.imitation.report
+```
+
+The CLI defaults to two ticks per control and one worker per available core. Use `--control-ticks 6` and
+`--segments-per-replay 8` for a cheaper, evenly spaced validation sample. Solo driver `404` is excluded; ranked
+spectator identities are anonymized, so multiplayer results are reported separately and cannot be treated as
+identity-filtered data. The simulator runs locally in freeplay with no built-in auto, no climbing, and HP disabled.
+Replay phases/hubs remain in observations, but the engine does not restore carried FUEL, the match clock,
+shooter internals, HP schedule, or off-field FUEL lifecycle. Hopper/FUEL residuals are diagnostics, not a gate on
+input recovery. Pass `--legacy data/imitation/full-v2` to compare label agreement on overlapping robot-ticks
+against the previous engine-searched controls.
+
+The report includes overall and contact-excluded endpoint error. Geometry flags approximate bumper overlap,
+field wall/hub overlap, and a speed stall in ground FUEL. The contact-excluded metric drops a segment if any
+robot has a flag. No detected contact is not proof of a search failure.
+
+Before switching to recorded button labels, PR #2 validation ran every eligible two-second segment across
+eight workers: 45 solo replays and 11 passive multiplayer captures, yielding 4,322 segments and
+321,180 robot/control examples. Planar
+endpoint median / p90 was 2.35 / 24.81 cm overall and 1.78 / 24.48 cm excluding contact-flagged
+segments. Exact hopper match was 43.6% at reset and 18.6% at the endpoint, below the 80% target.
+
+On those archive intervals, the recorded transitions label 114,541 intake and 142,548 score examples.
+Robot-tick agreement with the old searched controls is 71.20% for intake and 82.19% for score.
+On 300 paired reset-velocity endpoints, position-derived linear velocity reduced p90 pose error from
+57.50 cm with recorded linear velocity to 50.72 cm, with the same reconstructed angular velocity.
 
 ## 2. Goal labelling
 
-From states alone, label each pro segment as Collect(cluster), Score(spot) or Stage(spot), based on hopper slope,
-where codes (balls leaving to the hub), velocity and position relative to the arc. These labels train the planner
-directly, and they show where the hand rules disagree with pros.
+From states alone, label each pro segment as Collect(cluster), Score(spot) or Stage(spot). Local pickups and hopper
+growth indicate collection; local launches around the shooting arc, subsequent hub arrivals, and hopper drawdown
+indicate scoring. Motion toward dense nearby field FUEL can also indicate collection. Otherwise the end of the
+observed path is the staging target. In multiplayer, ambiguous transfers are attributed to the nearest robot.
+These are weak labels for planner training, not ground truth about a driver's intent.
 
 ## 3. Imitation
 
