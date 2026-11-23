@@ -1,0 +1,155 @@
+{
+  "metadata": {
+    "created": "2026-11-23T08:58:07.447612+00:00",
+    "seeds": 12,
+    "modes": [
+      "1v1",
+      "2v2",
+      "3v3"
+    ],
+    "opponent_defender": false,
+    "jobs": 6,
+    "duration": 160,
+    "ticks": 3,
+    "auto": "none",
+    "event": "event",
+    "hp": true,
+    "teams": [
+      254,
+      2910,
+      1114,
+      4414,
+      60026
+    ],
+    "backend": "VecWasmEnv.rollout",
+    "foul_source": "alliance points: opponent breakdown.foulPoints; robot count: native foul events",
+    "revision": "6631554de8310ad25b5c485d6af84dbe07cc4db1",
+    "win_definition": "margin > 0; draws are not wins",
+    "role_order": [
+      "Scorer",
+      "Feeder",
+      "Defender",
+      "Contester"
+    ]
+  },
+  "summaries": [
+    {
+      "mode": "1v1",
+      "n": 12,
+      "mean_margin_pure": 17.333333333333332,
+      "mean_margin_strategic": -14.083333333333334,
+      "paired_diff": -31.416666666666668,
+      "paired_se": 18.62730902235053,
+      "win_rate_pure": 0.5,
+      "win_rate_strategic": 0.4166666666666667,
+      "foul_points_pure": 0.0,
+      "foul_points_strategic": 0.0,
+      "role_fractions": {
+        "Scorer": 0.8947916666666665,
+        "Feeder": 0.0,
+        "Defender": 0.09583333333333334,
+        "Contester": 0.009375
+      }
+    },
+    {
+      "mode": "2v2",
+      "n": 12,
+      "mean_margin_pure": -121.08333333333333,
+      "mean_margin_strategic": -18.666666666666668,
+      "paired_diff": 102.41666666666667,
+      "paired_se": 88.61941595292978,
+      "win_rate_pure": 0.3333333333333333,
+      "win_rate_strategic": 0.3333333333333333,
+      "foul_points_pure": 17.5,
+      "foul_points_strategic": 12.5,
+      "role_fractions": {
+        "Scorer": 0.8404947916666666,
+        "Feeder": 0.015755208333333336,
+        "Defender": 0.08125,
+        "Contester": 0.06249999999999998
+      }
+    },
+    {
+      "mode": "3v3",
+      "n": 12,
+      "mean_margin_pure": 20.5,
+      "mean_margin_strategic": 163.91666666666666,
+      "paired_diff": 143.41666666666666,
+      "paired_se": 90.4426369629285,
+      "win_rate_pure": 0.4166666666666667,
+      "win_rate_strategic": 0.6666666666666666,
+      "foul_points_pure": 22.5,
+      "foul_points_strategic": 37.5,
+      "role_fractions": {
+        "Scorer": 0.7911979166666666,
+        "Feeder": 0.05473958333333334,
+        "Defender": 0.05677083333333333,
+        "Contester": 0.09729166666666668
+      }
+    }
+  ],
+  "wall_seconds": 405.3621469350037,
+  "smoke_summaries": [
+    {
+      "mode": "1v1",
+      "n": 1,
+      "mean_margin_pure": 93.0,
+      "mean_margin_strategic": 117.0,
+      "paired_diff": 24.0,
+      "paired_se": null,
+      "win_rate_pure": 1.0,
+      "win_rate_strategic": 1.0,
+      "foul_points_pure": 0.0,
+      "foul_points_strategic": 0.0,
+      "role_fractions": {
+        "Scorer": 0.9125,
+        "Feeder": 0.0,
+        "Defender": 0.05,
+        "Contester": 0.0375
+      }
+    },
+    {
+      "mode": "2v2",
+      "n": 1,
+      "mean_margin_pure": -18.0,
+      "mean_margin_strategic": -83.0,
+      "paired_diff": -65.0,
+      "paired_se": null,
+      "win_rate_pure": 0.0,
+      "win_rate_strategic": 0.0,
+      "foul_points_pure": 0.0,
+      "foul_points_strategic": 30.0,
+      "role_fractions": {
+        "Scorer": 1.0,
+        "Feeder": 0.0,
+        "Defender": 0.0,
+        "Contester": 0.0
+      }
+    },
+    {
+      "mode": "3v3",
+      "n": 1,
+      "mean_margin_pure": -174.0,
+      "mean_margin_strategic": -273.0,
+      "paired_diff": -99.0,
+      "paired_se": null,
+      "win_rate_pure": 0.0,
+      "win_rate_strategic": 0.0,
+      "foul_points_pure": 0.0,
+      "foul_points_strategic": 30.0,
+      "role_fractions": {
+        "Scorer": 0.9753125,
+        "Feeder": 0.0,
+        "Defender": 0.0,
+        "Contester": 0.02468750000000002
+      }
+    }
+  ],
+  "smoke_wall_seconds": 80.87032881099731,
+  "pytest": "448 passed, 6 skipped in 49.74s",
+  "notes": [
+    "Opponent-defender evaluation skipped per quota-priority instruction.",
+    "No strategy fix iterations applied.",
+    "Full per-match diagnostics remain in ignored data/sim/strategy/strategy_eval.json."
+  ]
+}
