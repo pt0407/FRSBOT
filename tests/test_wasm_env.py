@@ -13,7 +13,7 @@ from frsbot.core.state import Phase
 from frsbot.replay.convert import convert
 from frsbot.replay.rbrp import Replay
 from frsbot.sim.engine.fetch import ENGINE_DIR
-from frsbot.sim.wasm_env import SERVER, WasmEnv, find_node, view_to_state
+from frsbot.sim.wasm_env import SERVER, JsonWasmEnv, WasmEnv, find_node, view_to_state
 
 
 def sample_view():
@@ -93,11 +93,11 @@ def test_local_robot_index_and_red_coordinates():
     assert (state.robots[1].x, state.robots[1].z, state.robots[1].alliance) == (2, -3, "red")
 
 
-@pytest.fixture
-def env():
+@pytest.fixture(params=[WasmEnv, JsonWasmEnv], ids=["binary", "json"])
+def env(request):
     if not (ENGINE_DIR / "manifest.json").exists():
         pytest.skip("requires python3 -m frsbot.sim.engine.fetch")
-    with WasmEnv() as instance:
+    with request.param() as instance:
         yield instance
 
 
@@ -115,7 +115,8 @@ def test_real_engine_accelerates_to_max_speed(env, team):
     assert state.t == 1
     assert "WASM" in env.engine
     assert state.fuel.pos.shape == (504, 3) and state.fuel.where.shape == (504,)
-    assert isinstance(env.view["hubs"]["blue"]["net"], list)
+    if isinstance(env, JsonWasmEnv):
+        assert isinstance(env.view["hubs"]["blue"]["net"], list)
     assert "score" in env.view and "gate" in env.view["robots"][0]
 
 
@@ -153,10 +154,14 @@ def test_real_engine_reset_determinism_freeplay_and_errors(env):
     np.testing.assert_array_equal(expected_fuel, second.fuel.pos)
     with pytest.raises(RuntimeError, match="unknown team"):
         env.reset(-1)
-    with pytest.raises(RuntimeError, match="unknown command"):
-        env._request("invalid")
-    with pytest.raises(RuntimeError, match="unknown robot"):
-        env._request("step", inputs={"99": {}}, n=1)
+    if isinstance(env, JsonWasmEnv):
+        with pytest.raises(RuntimeError, match="unknown command"):
+            env._request("invalid")
+        with pytest.raises(RuntimeError, match="unknown robot"):
+            env._request("step", inputs={"99": {}}, n=1)
+    else:
+        with pytest.raises(RuntimeError, match="unknown robot"):
+            env.step({99: Inputs()})
     with pytest.raises(RuntimeError, match=r"must be in"):
         env.step(Inputs(x=2))
     for ticks in (0, -1, True, 1.5):

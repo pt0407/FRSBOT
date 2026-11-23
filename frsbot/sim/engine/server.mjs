@@ -4,12 +4,13 @@ import readline from 'node:readline';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { recoverSegment } from './recovery.mjs';
+import { Driver, viewToState } from './driver.mjs';
 
 const directory = path.resolve(process.argv[2] ?? fileURLToPath(new URL('../../../data/engine', import.meta.url)));
 const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
 const teams = new Set(JSON.parse(fs.readFileSync(new URL('../../../data/robot_feel.json', import.meta.url), 'utf8')).map(r => r.team));
 const constructor = 'constructor(t,e,i){this.e=t,this.p=e,this.ids=i,';
-let sim = null, started = false, recovery = null;
+let sim = null, started = false, drivers = new Map(), freeplay = false, recovery = null;
 
 function validateConfig(config) {
   if (!teams.has(config.team)) throw new Error(`unknown team ${config.team}`);
@@ -26,7 +27,7 @@ async function create(config) {
     auto: 'none', event: 'event', hp: true, unload: true, freeplay: false };
   config = { ...defaults, ...config };
   validateConfig(config);
-  sim?.dispose(); sim = null; started = false;
+  sim?.dispose(); sim = null; started = false; drivers = new Map(); freeplay = config.freeplay;
   let ready, fail;
   const prepared = new Promise((resolve, reject) => { ready = resolve; fail = reject; });
   const timer = setTimeout(() => fail(new Error('engine prepare timed out')), 30000);
@@ -113,12 +114,12 @@ try {
       let view;
       if (request.cmd === 'new') {
         recovery = null;
-        view = await create(request.config ?? Object.fromEntries(Object.entries(request).filter(([k]) => k !== 'cmd')));
+        view = await create(request.config ?? Object.fromEntries(Object.entries(request).filter(([k]) => !['cmd', 'drivers'].includes(k))));
+        drivers = new Map(Object.entries(request.drivers ?? {}).map(([id, d]) => [Number(id), new Driver(d.spec, d.profile ?? {})]));
       } else if (request.cmd === 'recover') {
         if (!recovery) throw new Error('call new with recovery enabled before recovering a segment');
         view = recoverSegment(recovery, request.segment);
-      }
-      else if (request.cmd === 'close') { sim?.dispose(); sim = null; closing = true; }
+      } else if (request.cmd === 'close') { sim?.dispose(); sim = null; closing = true; }
       else {
         if (!sim) throw new Error('call new before using the simulation');
         if (request.cmd === 'start') {
@@ -130,11 +131,29 @@ try {
           const n = request.n ?? 1;
           if (!Number.isInteger(n) || n < 1 || n > 60000) throw new Error('n must be an integer in [1, 60000]');
           const inputs = inputsFor(request.inputs);
-          for (let i = 0; i < n; i++) sim.step(inputs);
+          const goals = Object.entries(request.goals ?? {}).map(([key, goal]) => {
+            const driver = drivers.get(Number(key));
+            if (!driver) throw new Error(`robot ${key} has no driver; pass drivers to new`);
+            if (!goal || typeof goal.kind !== 'string' || !Array.isArray(goal.point) || !goal.point.every(Number.isFinite)) throw new Error('invalid goal');
+            driver.abandoned = false;
+            return [Number(key), driver, { kind: goal.kind, point: goal.point }];
+          });
+          for (let i = 0; i < n; i++) {
+            if (goals.length) {
+              const state = viewToState(sim.views(), freeplay);
+              for (const [id, driver, goal] of goals) {
+                state.me = sim.ids.indexOf(id);
+                inputs.set(id, driver.act(goal, state));
+                if (driver.abandon) driver.abandoned = true;
+              }
+            }
+            sim.step(inputs);
+          }
         } else if (request.cmd !== 'state') throw new Error(`unknown command ${request.cmd}`);
         view = sim.views();
       }
-      process.stdout.write(JSON.stringify({ ok: true, view, engine: sim?.engine, build: sim?.engineBuild },
+      const driver = Object.fromEntries([...drivers].map(([id, d]) => [id, { abandoned: !!d.abandoned, recovering: d.recovering, stage: d.recoveryStage }]));
+      process.stdout.write(JSON.stringify({ ok: true, view, driver, engine: sim?.engine, build: sim?.engineBuild },
         (_key, value) => ArrayBuffer.isView(value) ? Array.from(value) : value) + '\n');
     } catch (error) { process.stdout.write(JSON.stringify({ ok: false, error: error.message }) + '\n'); }
     if (closing) break;

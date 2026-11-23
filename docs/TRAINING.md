@@ -17,19 +17,20 @@ the driver's sticks.
 Solo replays sample state at 30 Hz and spectator recordings can sample at 60 Hz. Neither records inputs.
 The recovery CLI partitions each replay into non-overlapping approximately 2-second segments.
 Process workers run independent matches using the real WASM engine; they restore full body pose/velocity and
-field/air FUEL (`fo_body_set`, `fo_ball_set`) at the start of each segment. With preload disabled, the workers
-prime the actual engine intake with recorded carried FUEL IDs before setting the replay body and FUEL state.
+field/air FUEL (`fo_body_set`, `fo_ball_set`) at the start of each segment, leaving preload disabled.
 The RBRP FUEL header has a ball ID and where code, but no explicit owner field; intake events identify the owner
-when available, and carried position resolves otherwise unknown IDs. Workers reconstruct angular and ball velocity
-from adjacent frames and search field-relative stick trajectories and intake/score button hypotheses.
-A trajectory starts from observed displacement and velocity, corrects against
-intermediate simulated poses during search, and is ranked against recorded pose, angle, velocity, hopper and FUEL.
+when available, and carried position resolves otherwise unknown IDs. A recorded `0/1 → 2` pickup labels intake,
+and `2 → 1` labels score for the previous owner. Each transfer marks a ±3 tick span, projected onto held control
+intervals; no transitions are inferred across capture gaps. These indicate observable transfers, not every press.
+Workers restore recorded linear velocity and estimate angular and ball velocity from adjacent frames. They search
+drive and turn only. A trajectory starts from observed displacement and velocity, corrects against intermediate
+simulated poses during search, and is ranked against recorded pose, angle and velocity.
 The chosen inputs are then replayed from a fresh identical reset, with no corrections or intermediate resets.
 The target is a 2-second open-loop planar endpoint error below 10 cm.
 
 The numerical `data/imitation/<run>.npz` contains recorded `GameState` columns, `Inputs` and residuals for
 each robot/control interval, and a goal per robot/segment. Duration is in engine ticks; rows sharing a segment
-share the same initial reset. Large residuals are flagged and weighted at 0.25 instead of 1.0. Read examples as
+share the same initial reset. Archives store a per-example quality weight `exp(-pose_m / 0.10)`. Read examples as
 `(GameState, Inputs, residual, Goal)` through `frsbot.imitation.dataset.examples(path)`. Dataset and raw recordings
 are ignored by Git.
 
@@ -45,11 +46,10 @@ The CLI defaults to two ticks per control and one worker per available core. Use
 `--segments-per-replay 8` for a cheaper, evenly spaced validation sample. Solo driver `404` is excluded; ranked
 spectator identities are anonymized, so multiplayer results are reported separately and cannot be treated as
 identity-filtered data. The simulator runs locally in freeplay with no built-in auto, no climbing, and HP disabled.
-Replay phases/hubs remain in observations, but the engine does not restore the match clock, shooter internals,
-HP schedule, or off-field FUEL lifecycle. Priming uses the target ball identities, but the engine controls how
-those balls are split between hopper and feed and the replay does not recover feed order, shot cooldown, or
-other internal transients. These limitations affect hopper/FUEL residuals and mean the recovered controls are
-estimates, not original driver inputs.
+Replay phases/hubs remain in observations, but the engine does not restore carried FUEL, the match clock,
+shooter internals, HP schedule, or off-field FUEL lifecycle. Hopper/FUEL residuals are diagnostics, not a gate on
+input recovery. Pass `--legacy data/imitation/full-v2` to compare label agreement on overlapping robot-ticks
+against the previous engine-searched controls.
 
 The report includes overall and contact-excluded endpoint error. Geometry flags approximate bumper overlap,
 field wall/hub overlap, and a speed stall in ground FUEL. The contact-excluded metric drops a segment if any

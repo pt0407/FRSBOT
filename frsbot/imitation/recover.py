@@ -18,7 +18,7 @@ from frsbot.imitation.labels import label_segments
 from frsbot.replay.convert import convert
 from frsbot.replay.rbrp import parse, robot_pose
 from frsbot.scrape.harvest import DATA, EXCLUDE_NAMES
-from frsbot.sim.wasm_env import WasmEnv
+from frsbot.sim.wasm_env import JsonWasmEnv
 
 SEGMENT_TICKS = 120
 RESIDUALS = ("pose_m", "yaw_rad", "velocity_m_s", "hopper_abs", "fuel_where", "fuel_match")
@@ -101,7 +101,7 @@ def make_segment(replay, states, ticks, indices, specs, buttons):
 def _run(segment):
     global _env
     if _env is None:
-        _env = WasmEnv()
+        _env = JsonWasmEnv()
         _env._spawn()
         Finalize(_env, _env.close, exitpriority=0)
         _env._request("new", config=dict(team=254, recovery=True))
