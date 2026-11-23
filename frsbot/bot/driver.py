@@ -5,6 +5,7 @@ import math
 import numpy as np
 
 from frsbot.bot.planner import FIELD_X, FIELD_Z, SCORING_X, Goal, Planner, angle_error
+from frsbot.bot.tuning import PARAMS
 from frsbot.core.field import HUB_CENTRES
 from frsbot.core.inputs import Inputs
 
@@ -193,7 +194,7 @@ class Driver:
             ahead = rel @ np.array([math.cos(robot.a), math.sin(robot.a)])
             side = rel @ np.array([-math.sin(robot.a), math.cos(robot.a)])
             path_fuel = bool(np.any((ahead > 0) & (ahead < 1.2) & (abs(side) < self.spec.bumper_width / 2)))
-        intake = robot.hopper < self.planner.capacity(state) and (goal.kind == "Collect" or path_fuel)
+        intake = robot.hopper < self.planner.capacity(state) and (path_fuel or (goal.kind == "Collect" and not PARAMS["intake_needs_fuel"]))
         if shooting and state.hubs[robot.alliance].seconds_to_toggle <= self.planner.score_time(state) + 1:
             intake = False
         if shooting and self.recovering:
