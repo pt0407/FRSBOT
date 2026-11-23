@@ -127,6 +127,10 @@ async def drive(page, spec, alliance, output, run_id, timeout=300, driver="pytho
                         raise RuntimeError("ImAI requested robot-relative input; no fieldRelative pad binding")
                     last_inputs = inputs
                     acts += 1
+                    # Send now — waiting for the next loop's write+poll adds a
+                    # full round-trip of latency to every command.
+                    axes, buttons = inputs_to_pad(inputs)
+                    await page.evaluate("pad => window.__imai.writePad(pad)", dict(axes=axes, buttons=buttons))
                 record(dict(kind="step", t=state.t, wall_time=time.time(), seq=seq,
                             received=frame["received"], state=state_summary(state), inputs=asdict(inputs),
                             predicted_t=predicted.t, latency_ms=L * 1000,

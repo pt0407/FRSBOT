@@ -143,7 +143,11 @@
   "hopperStorageCapacity": 80,
   "feedLanes": 3,
   "feedPlaces": 3,
-  "totalCapacity": 89
+  "totalCapacity": 89,
+  "shooterYawDeg": 180,
+  "maxPassSpeed": 1.5,
+  "maxShotSpeed": 1.27,
+  "aimTranslationScale": 0.3
  },
  {
   "team": 1323,
@@ -213,7 +217,13 @@
   "hopperStorageCapacity": 80,
   "feedLanes": 1,
   "feedPlaces": 2,
-  "totalCapacity": 82
+  "totalCapacity": 82,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 4.0,
+  "maxShotSpeed": 3.94,
+  "aimTranslationScale": 1.0,
+  "trenchCut": true,
+  "turret": true
  },
  {
   "team": 1360,
@@ -295,7 +305,12 @@
   "hopperStorageCapacity": 38,
   "feedLanes": 1,
   "feedPlaces": 4,
-  "totalCapacity": 42
+  "totalCapacity": 42,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 5.0,
+  "maxShotSpeed": 2.475,
+  "aimTranslationScale": 1.0,
+  "turret": true
  },
  {
   "team": 1678,
@@ -385,7 +400,11 @@
   "hopperStorageCapacity": 77,
   "feedLanes": 4,
   "feedPlaces": 2,
-  "totalCapacity": 85
+  "totalCapacity": 85,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 2.5,
+  "maxShotSpeed": 0.25,
+  "aimTranslationScale": 0.4
  },
  {
   "team": 1690,
@@ -451,7 +470,12 @@
   "hopperStorageCapacity": 47,
   "feedLanes": 1,
   "feedPlaces": 4,
-  "totalCapacity": 51
+  "totalCapacity": 51,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 5.0,
+  "maxShotSpeed": 4.18,
+  "aimTranslationScale": 1.0,
+  "turret": true
  },
  {
   "team": 1833,
@@ -529,7 +553,11 @@
   "hopperStorageCapacity": 56,
   "feedLanes": 4,
   "feedPlaces": 2,
-  "totalCapacity": 64
+  "totalCapacity": 64,
+  "shooterYawDeg": 180,
+  "maxPassSpeed": 0.3318,
+  "maxShotSpeed": 0.45,
+  "aimTranslationScale": 0.45
  },
  {
   "team": 1706,
@@ -595,7 +623,12 @@
   "hopperStorageCapacity": 55,
   "feedLanes": 2,
   "feedPlaces": 3,
-  "totalCapacity": 61
+  "totalCapacity": 61,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 3.5,
+  "maxShotSpeed": 3.2,
+  "aimTranslationScale": 0.7,
+  "turret": true
  },
  {
   "team": 254,
@@ -657,7 +690,11 @@
   "hopperStorageCapacity": 72,
   "feedLanes": 4,
   "feedPlaces": 2,
-  "totalCapacity": 80
+  "totalCapacity": 80,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 1.5,
+  "maxShotSpeed": 0.3,
+  "aimTranslationScale": 0.3
  },
  {
   "team": 2056,
@@ -723,7 +760,12 @@
   "hopperStorageCapacity": 62,
   "feedLanes": 1,
   "feedPlaces": 4,
-  "totalCapacity": 66
+  "totalCapacity": 66,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 4.5,
+  "maxShotSpeed": 3.7,
+  "aimTranslationScale": 0.8,
+  "turret": true
  },
  {
   "team": 2481,
@@ -821,7 +863,11 @@
   "hopperStorageCapacity": 103,
   "feedLanes": 4,
   "feedPlaces": 3,
-  "totalCapacity": 115
+  "totalCapacity": 115,
+  "shooterYawDeg": 180,
+  "maxPassSpeed": 4.3,
+  "maxShotSpeed": 4.3,
+  "aimTranslationScale": 0.5
  },
  {
   "team": 6329,
@@ -895,7 +941,12 @@
   "hopperStorageCapacity": 70,
   "feedLanes": 4,
   "feedPlaces": 2,
-  "totalCapacity": 78
+  "totalCapacity": 78,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 3.0,
+  "maxShotSpeed": 0.65,
+  "aimTranslationScale": 0.4,
+  "trenchCut": true
  },
  {
   "team": 5000,
@@ -1044,7 +1095,8 @@
    },
    "scoreSpeedTol": 0.15,
    "autoStationaryHeadingToleranceDeg": 10
-  }
+  },
+  "shooterYawDeg": 0
  },
  {
   "team": 4414,
@@ -1114,7 +1166,12 @@
   "hopperStorageCapacity": 115,
   "feedLanes": 1,
   "feedPlaces": 2,
-  "totalCapacity": 117
+  "totalCapacity": 117,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 4.0,
+  "maxShotSpeed": 3.87,
+  "aimTranslationScale": 1.0,
+  "turret": true
  },
  {
   "team": 4946,
@@ -1184,7 +1241,12 @@
   "hopperStorageCapacity": 100,
   "feedLanes": 1,
   "feedPlaces": 2,
-  "totalCapacity": 102
+  "totalCapacity": 102,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 4.0,
+  "maxShotSpeed": 2.0,
+  "aimTranslationScale": 1.0,
+  "turret": true
  },
  {
   "team": 60026,
@@ -1233,7 +1295,11 @@
   "hopperStorageCapacity": 35,
   "feedLanes": 3,
   "feedPlaces": 3,
-  "totalCapacity": 44
+  "totalCapacity": 44,
+  "shooterYawDeg": 180,
+  "maxPassSpeed": 2.5,
+  "maxShotSpeed": 0.5,
+  "aimTranslationScale": 1.0
  },
  {
   "team": 7558,
@@ -1292,7 +1358,11 @@
   "hopperStorageCapacity": 59,
   "feedLanes": 4,
   "feedPlaces": 2,
-  "totalCapacity": 67
+  "totalCapacity": 67,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 1.5,
+  "maxShotSpeed": 0.9,
+  "aimTranslationScale": 0.2
  },
  {
   "team": 7769,
@@ -1358,7 +1428,11 @@
   "hopperStorageCapacity": 70,
   "feedLanes": 2,
   "feedPlaces": 3,
-  "totalCapacity": 76
+  "totalCapacity": 76,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 1.5,
+  "maxShotSpeed": 0.878,
+  "aimTranslationScale": 0.2
  },
  {
   "team": 971,
@@ -1424,7 +1498,12 @@
   "hopperStorageCapacity": 55,
   "feedLanes": 2,
   "feedPlaces": 2,
-  "totalCapacity": 59
+  "totalCapacity": 59,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 3.5,
+  "maxShotSpeed": 3.2,
+  "aimTranslationScale": 0.7,
+  "turret": true
  },
  {
   "team": 9785,
@@ -1498,6 +1577,11 @@
   "hopperStorageCapacity": 60,
   "feedLanes": 3,
   "feedPlaces": 2,
-  "totalCapacity": 66
+  "totalCapacity": 66,
+  "shooterYawDeg": 0,
+  "maxPassSpeed": 3.0,
+  "maxShotSpeed": 0.3,
+  "aimTranslationScale": 0.4,
+  "trenchCut": true
  }
 ]

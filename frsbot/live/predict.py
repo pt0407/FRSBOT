@@ -76,7 +76,7 @@ def predict(state, last_inputs, L, spec):
             factor = min(1, spec.accel * dt / change) if change else 0
             robot.vx += dx * factor
             robot.vz += dz * factor
-            target_w = -shape(turn) * spec.turn_rate
+            target_w = -shape(turn) * spec.turn_rate * .45  # engine's 0.45 manual turn-rate factor
             omega += max(-TURN_ACCEL * dt, min(TURN_ACCEL * dt, target_w - omega))
             robot.a += omega * dt
             robot.x += robot.vx * dt

@@ -25,7 +25,7 @@ PHASES = list(Phase)
 SCORE_KEYS = ("autoFuel", "teleFuel", "inactiveFuel", "towerAuto", "towerTele", "foulPoints", "total")
 GATE_KEYS = ("open", "hood", "flywheel", "range", "heading", "speed", "tag")
 ENGINE_BUTTONS = ("intake", "score", "outtake", "climb", "block", "stow", "field_relative", "hood")
-GOAL_KINDS = ("Hold", "Collect", "Score", "Stage")
+GOAL_KINDS = ("Hold", "Collect", "Score", "Stage", "Feed", "ZoneMow", "Seed")
 
 
 @dataclass

@@ -23,7 +23,7 @@
         const dx = vx - r.vx, dz = vz - r.vz, change = Math.hypot(dx, dz);
         const factor = change ? Math.min(1, spec.accel * dt / change) : 0;
         r.vx += dx * factor; r.vz += dz * factor;
-        omega += Math.max(-10 * dt, Math.min(10 * dt, -shape(turn) * spec.turn_rate - omega));
+        omega += Math.max(-10 * dt, Math.min(10 * dt, -shape(turn) * spec.turn_rate * .45 - omega));
         r.a += omega * dt; r.x += r.vx * dt; r.z += r.vz * dt;
         remaining -= dt;
       }

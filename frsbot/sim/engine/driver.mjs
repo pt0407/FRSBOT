@@ -5,11 +5,12 @@ import { fileURLToPath } from 'node:url';
 
 export const HUB_CENTRES = { blue: [-3.645, 0.0, 1.829], red: [3.645, 0.0, 1.829] };
 const HUBS = [HUB_CENTRES.blue, HUB_CENTRES.red];
-export const FIELD_X = 8.270494, FIELD_Z = 4.034663, SCORING_X = 4.3;
+export const FIELD_X = 8.270494, FIELD_Z = 4.034663, SCORING_X = 4.3, ZONE_X = 4.2418, FEED_X = 3.9;
 const F32_02 = Math.fround(.2);
 const TIMELINE = [[0, 'auto'], [20, 'gap'], [23, 'transition'], [33, 'shift1'], [58, 'shift2'], [83, 'shift3'],
   [108, 'shift4'], [133, 'endgame'], [163, 'settle'], [166, 'done']];
-export const GOAL_KINDS = ['Hold', 'Collect', 'Score', 'Stage'];
+const SHIFT_STARTS = [33, 58, 83, 108];
+export const GOAL_KINDS = ['Hold', 'Collect', 'Score', 'Stage', 'Feed', 'ZoneMow', 'Seed'];
 
 // Python float semantics.
 function pymod(x, m) { let r = x % m; if (r !== 0 && (m < 0) !== (r < 0)) r += m; return r === 0 ? 0 : r; }
@@ -52,6 +53,13 @@ export function viewToState(view, freeplay = false, me = null) {
     score: view.score, me: me ?? (local < 0 ? 0 : local) };
 }
 
+// Shipped tuning defaults used by Driver (frsbot/bot/tuning.py DEFAULTS subset).
+const PARAMS = { driveDistGain: 2.0, driveBrakeFrac: .4, sweepSpeedFrac: .8,
+  patrolSpeedFrac: .22, patrolFireSpeed: .9, patrolLow: 12, patrolHigh: 95,
+  seedSpeedFrac: .35, collectNearFrac: .6, collectCosFloor: .05, mowConeMin: 99,
+  mowSpeedFrac: .35, intakeNeedsFuel: 0, approachFire: 1, freeFire: 0, freeFireSpeed: .8,
+  preFireS: 2.0, postFireS: .35, zoneSpeedFrac: .5, scoreRadiusFrac: .5, scoreCloseM: 2.1, bank: 0 };
+
 export function inverseDeadzone(value) { return value ? copysign(.12 + .88 * Math.min(1, Math.abs(value)), value) : 0.0; }
 
 export function intersects(a, b, box) {
@@ -84,16 +92,27 @@ function tupleLess(a, b) {
 }
 
 export class Planner {
-  constructor(spec, profile = {}) { this.spec = spec; this.profile = profile; }
+  constructor(spec, profile = {}) { this.spec = spec; this.profile = profile; this.scoreOffset = 0; this.avoidSlots = []; }
   capacity(state) { return state.robots[state.me].capacity || this.spec.total_capacity; }
   bounds() { const d = this.spec.hub_shot.distance ?? []; return [this.spec.min_range || Math.min(...d), this.spec.max_range || Math.max(...d)]; }
   hub(state) { return HUB_CENTRES[state.robots[state.me].alliance].slice(0, 2); }
+  hubOpen(state) {
+    // Effective fire window: active, pre-fire lead before activation, and the
+    // short post-grace (~0.3 s measured) after deactivation.
+    const hub = state.hubs[state.robots[state.me].alliance];
+    if (hub.active) return true;
+    if (hub.secondsToToggle <= PARAMS.preFireS) return true;
+    let start = null;
+    for (const s of SHIFT_STARTS) if (s <= state.t) start = s;
+    return start !== null && state.t - start <= PARAMS.postFireS;
+  }
   scoreSpot(state, angleOffset = 0) {
     const robot = state.robots[state.me];
     const [cx, cz] = this.hub(state);
     const [low, high] = this.bounds();
-    const radius = Math.max(low + .3, Math.min(high - .5, (low + high) / 2));
-    const heading = Math.atan2(robot.z - cz, robot.x - cx) + angleOffset;
+    let radius = Math.max(low + .3, Math.min(high - .5, low + PARAMS.scoreRadiusFrac * (high - low)));
+    if (PARAMS.bank) radius = Math.max(low + .25, Math.min(high - .3, PARAMS.scoreCloseM));
+    const heading = Math.atan2(robot.z - cz, robot.x - cx) + angleOffset + this.scoreOffset;
     const margin = Math.hypot(this.spec.bumper_length, this.spec.bumper_width) / 2 + .1;
     let candidates = [];
     const deltas = [0]; for (let i = 1; i < 37; i++) for (const s of [-1, 1]) deltas.push(s * i * Math.PI / 36);
@@ -106,6 +125,10 @@ export class Planner {
       const back = robot.alliance === 'blue' ? Math.PI : 0;
       candidates = this.profile.score_arc_degrees.map(deg => [cx + radius * Math.cos(back + deg * (Math.PI / 180)), cz + radius * Math.sin(back + deg * (Math.PI / 180))]);
     }
+    if (this.avoidSlots.length) {
+      const free = candidates.filter(p => this.avoidSlots.every(slot => dist(p, slot) >= 1.5));
+      if (free.length) candidates = free;
+    }
     const preferred = [cx + radius * Math.cos(heading), cz + radius * Math.sin(heading)];
     return minBy(candidates, p => dist(p, preferred));
   }
@@ -113,6 +136,10 @@ export class Planner {
     const pos = state.fuelPos, where = state.fuelWhere, out = [];
     for (let i = 0; i < where.length; i++) if (where[i] === 0 && pos[3 * i + 1] < F32_02) out.push([pos[3 * i], pos[3 * i + 2]]);
     return out;
+  }
+  inzoneFuel(state) {
+    const robot = state.robots[state.me];
+    return this.fuelPoints(state).filter(p => robot.alliance === 'blue' ? p[0] < -SCORING_X : p[0] > SCORING_X);
   }
   scoreTime(state) {
     const robot = state.robots[state.me];
@@ -138,13 +165,14 @@ export class Driver {
     this.planner = new Planner(spec, profile);
     this.recovering = false; this.crossing = null; this.progressAt = null; this.openSince = null;
     this.previousHopper = null; this.recoveryStage = 0; this.recoveryPoint = null; this.wiggleUntil = 0;
-    this.abandon = false; this.shootWhileCollecting = profile.shoot_while_collecting ?? false; this.reaimUntil = 0;
+    this.abandon = false; this.shootWhileCollecting = profile.shoot_while_collecting ?? ((spec.max_shot_speed || 0) >= 2); this.reaimUntil = 0;
+    this.stallT = null; this.unwedgeUntil = 0; this.wedgePos = null; this.sweep_i = 0; this._sweepGoal = null; this.patrolSt = 'fire';
   }
 
   progress(goal, state) {
     const robot = state.robots[state.me];
     this.abandon = false;
-    const scoring = goal.kind === 'Score' && state.hubs[robot.alliance].active && robot.hopper > 0;
+    const scoring = goal.kind === 'Score' && this.planner.hubOpen(state) && robot.hopper > 0;
     if (!scoring) {
       this.progressAt = null; this.openSince = null; this.previousHopper = robot.hopper;
       this.recoveryStage = 0; this.recoveryPoint = null; this.recovering = false;
@@ -196,6 +224,20 @@ export class Driver {
     }
     const pad = Math.hypot(this.spec.bumper_length, this.spec.bumper_width) / 2 + .12;
     const boxes = HUBS.map(([cx, cz]) => [cx - .597 - pad, cx + .597 + pad, cz - .597 - pad, cz + .597 + pad]);
+    // Engine geometry (module 2960), rotated (-x,-z) per alliance side:
+    // trench posts x in |3.048..4.242|, |z| 2.451-2.756 (tall robots can't pass
+    // the 0.565 m bar); tower x |7.12..8.3|, blue z -0.21..+0.79; depot x
+    // |7.58..8.3|, blue z -2.46..-1.39. Bump ramps (|z| 0.597-2.451) are drivable.
+    for (const s of [-1, 1]) {
+      if (!this.spec.trench_cut) {
+        const plo = Math.min(s * 3.048, s * 4.242), phi = Math.max(s * 3.048, s * 4.242);
+        boxes.push([plo, phi, 2.40, 2.85], [plo, phi, -2.85, -2.40]);
+      }
+      const tlo = Math.min(s * 7.12, s * 8.35), thi = Math.max(s * 7.12, s * 8.35);
+      const dlo = Math.min(s * 7.55, s * 8.35), dhi = Math.max(s * 7.55, s * 8.35);
+      if (s === -1) boxes.push([tlo, thi, -.25, .83], [dlo, dhi, -2.5, -1.35]);
+      else boxes.push([tlo, thi, -.83, .25], [dlo, dhi, 1.35, 2.5]);
+    }
     for (const [left, right, bottom, top] of boxes) {
       if (left < start[0] && start[0] < right && bottom < start[1] && start[1] < top)
         return minBy([[left - .08, start[1]], [right + .08, start[1]], [start[0], bottom - .08], [start[0], top + .08]], p => dist(start, p));
@@ -210,7 +252,11 @@ export class Driver {
       if (cost > (best.get(index) ?? Infinity)) continue;
       for (let j = 0; j < nodes.length; j++) {
         const point = nodes[j];
-        if (j === index || boxes.some(box => intersects(nodes[index], point, box))) continue;
+        if (j === index) continue;
+        // Edges into the target may end inside the box containing it; every
+        // other box still blocks.
+        const blockers = j !== 1 ? boxes : boxes.filter(b => !(b[0] < target[0] && target[0] < b[1] && b[2] < target[1] && target[1] < b[3]));
+        if (blockers.some(box => intersects(nodes[index], point, box))) continue;
         const newCost = cost + dist(nodes[index], point);
         if (newCost < (best.get(j) ?? Infinity)) { best.set(j, newCost); queue.push([newCost, j, [...route, j]]); }
       }
@@ -221,61 +267,195 @@ export class Driver {
   act(goalIn, state) {
     const goal = this.progress(goalIn, state);
     const robot = state.robots[state.me], spec = this.spec, planner = this.planner;
-    const active = state.hubs[robot.alliance].active;
+    const active = planner.hubOpen(state);
     const hub = planner.hub(state);
     const [low, high] = planner.bounds();
     const distanceHub = Math.hypot(robot.x - hub[0], robot.z - hub[1]);
     const shooting = goal.kind === 'Score' && active && robot.hopper > 0;
+    const sign = robot.alliance === 'blue' ? 1 : -1;
     const ownSide = robot.alliance === 'blue' ? robot.x < -SCORING_X : robot.x > SCORING_X;
+    const inZone = -sign * robot.x > ZONE_X - .34;  // bumper-edge legality (~|x| 3.9)
     const atSpot = dist([robot.x, robot.z], goal.point) < .7;
     const target = goal.point;
-    const point = this.waypoint([robot.x, robot.z], target);
-    const dx = point[0] - robot.x, dz = point[1] - robot.z;
-    const distance = Math.hypot(dx, dz);
-    const direction = Math.atan2(dz, dx);
+    const pathKind = goal.kind === 'Sweep' || goal.kind === 'Patrol' || goal.kind === 'SeedMow';
+    let point;
+    if (pathKind && goal.path && goal.path.length) {
+      if (goal !== this._sweepGoal) { this._sweepGoal = goal; this.sweep_i = 0; }
+      let i = this.sweep_i;
+      while (i < goal.path.length - 1 && (dist([robot.x, robot.z], goal.path[i]) < .55
+          || dist([robot.x, robot.z], goal.path[i + 1]) + .4 < dist([robot.x, robot.z], goal.path[i]))) i++;
+      this.sweep_i = i;
+      point = this.waypoint([robot.x, robot.z], goal.path[i]);
+      if (point[0] === robot.x && point[1] === robot.z) point = goal.path[i];
+    } else if (goal.kind === 'Score' && dist([robot.x, robot.z], target) < 2.0) {
+      point = target;
+    } else {
+      point = this.waypoint([robot.x, robot.z], target);
+    }
+    let dx = point[0] - robot.x, dz = point[1] - robot.z;
+    let distance = Math.hypot(dx, dz);
+    let direction = Math.atan2(dz, dx);
+    const points = planner.fuelPoints(state);
+    let pathFuel = false, mowDir = null;
+    if (points.length) {
+      const c = Math.cos(robot.a), s = Math.sin(robot.a);
+      let cone = 0, mx = 0, mz = 0;
+      for (const [px, pz] of points) {
+        const rx = px - robot.x, rz = pz - robot.z;
+        const ahead = rx * c + rz * s, side = rx * -s + rz * c;
+        if (ahead > 0 && ahead < 1.2 && Math.abs(side) < spec.bumper_width / 2) pathFuel = true;
+        if (ahead > 0 && ahead < 1.6 && Math.abs(side) < spec.bumper_width * .6) { cone++; mx += rx; mz += rz; }
+      }
+      if (cone >= PARAMS.mowConeMin) mowDir = Math.atan2(mz, mx);
+    }
+    const collectKind = ['Collect', 'Patrol', 'ZoneMow', 'Feed'].includes(goal.kind);
+    if (collectKind && mowDir !== null) {
+      point = [robot.x + 2.5 * Math.cos(mowDir), robot.z + 2.5 * Math.sin(mowDir)];
+      dx = point[0] - robot.x; dz = point[1] - robot.z;
+      distance = Math.hypot(dx, dz);
+      direction = mowDir;
+    } else if (collectKind && distance < .6 && pathFuel) {
+      point = [robot.x + 1.2 * Math.cos(robot.a), robot.z + 1.2 * Math.sin(robot.a)];
+      dx = point[0] - robot.x; dz = point[1] - robot.z;
+      distance = Math.hypot(dx, dz);
+      direction = Math.atan2(dz, dx);
+    }
     const movingShot = this.shootWhileCollecting && goal.kind === 'Collect' && active && ownSide && robot.hopper > 0
       && (spec.max_shot_speed || 0) >= 2 && low + .2 <= distanceHub && distanceHub <= high - .5;
+    // Patrol FSM: `fire` parks and dumps (feed dies at v>~0.3 / while intaking);
+    // `fill` noses into the seeded pile. Alternates on hopper level.
+    let patrolFiring = false;
+    if (goal.kind === 'Patrol') {
+      if (this.patrolSt === 'fire') {
+        if (!(ownSide && low <= distanceHub && distanceHub <= high) || robot.hopper <= PARAMS.patrolLow) this.patrolSt = 'fill';
+      } else if (robot.hopper >= PARAMS.patrolHigh || planner.inzoneFuel(state).length === 0) {
+        this.patrolSt = 'fire';
+      }
+      patrolFiring = this.patrolSt === 'fire' && ownSide && active && robot.hopper > 0 && low <= distanceHub && distanceHub <= high;
+    }
     const arriving = distance < .3;
     const finalWaypoint = dist(point, target) < .01;
     const vmax = spec.max_speed;
-    let speed = Math.min(vmax, 2 * distance, Math.sqrt(2 * spec.accel * .4 * Math.max(0, distance - .12)));
-    if (goal.kind === 'Collect') {
-      if (distance < 1) speed = Math.min(speed, vmax * .6);
-      speed *= Math.max(.05, Math.cos(angleError(direction, robot.a)));
+    let brakeDist = distance;
+    if (pathKind && goal.path && goal.path.length) {
+      for (let j = this.sweep_i; j < goal.path.length - 1; j++) brakeDist += dist(goal.path[j], goal.path[j + 1]);
     }
-    if (arriving && finalWaypoint) speed = 0;
-    else if (arriving) speed = Math.max(speed, .35);
+    let speed = Math.min(vmax, PARAMS.driveDistGain * brakeDist,
+      Math.sqrt(2 * spec.accel * PARAMS.driveBrakeFrac * Math.max(0, brakeDist - .12)));
+    if (goal.kind === 'Sweep') speed = Math.min(speed, vmax * PARAMS.sweepSpeedFrac);
+    else if (goal.kind === 'ZoneMow') speed = Math.min(speed, vmax * PARAMS.zoneSpeedFrac);
+    else if (goal.kind === 'Patrol') {
+      let cap = vmax * PARAMS.patrolSpeedFrac;
+      if (robot.hopper > 0 && ownSide && active && low <= distanceHub && distanceHub <= high)
+        cap = Math.min(cap, PARAMS.patrolFireSpeed * .85);
+      speed = Math.min(speed, cap);
+      if (patrolFiring) speed = 0;
+    } else if (goal.kind === 'SeedMow') speed = Math.min(speed, vmax * PARAMS.seedSpeedFrac);
+    if (collectKind) {
+      if (distance < 1) speed = Math.min(speed, vmax * PARAMS.collectNearFrac);
+      else if (mowDir !== null) speed = Math.min(speed, vmax * PARAMS.mowSpeedFrac);
+      if (['Collect', 'ZoneMow', 'Feed'].includes(goal.kind))
+        speed *= Math.max(PARAMS.collectCosFloor, Math.cos(angleError(direction, robot.a)));
+    } else if (goal.kind === 'Sweep') {
+      if (brakeDist < 1) speed = Math.min(speed, vmax * PARAMS.collectNearFrac);
+      speed *= Math.max(PARAMS.collectCosFloor, Math.cos(angleError(direction, robot.a)));
+    }
+    if (arriving && finalWaypoint) {
+      speed = 0;
+      if ((goal.kind === 'Collect' || goal.kind === 'Patrol') && pathFuel) speed = .6;
+    } else if (arriving) speed = Math.max(speed, .35);
     const scoreSpeed = spec.max_shot_speed || (spec.brain_equivalents?.scoreSpeedTol ?? .15);
-    if (movingShot) speed = Math.min(speed, scoreSpeed * .85);
-    if (shooting && finalWaypoint && low <= distanceHub && distanceHub <= high && distance < .6) speed = Math.min(speed, scoreSpeed * .5);
-    let vx = speed * Math.cos(direction), vz = speed * Math.sin(direction);
+    if (movingShot) speed = Math.min(speed, Math.min(scoreSpeed, spec.max_shot_speed * .6));
+    if (shooting && finalWaypoint && low <= distanceHub && distanceHub <= high && distance < .6)
+      speed = 0;  // stop dead so the engine's hold/firing/xLock engages
+    const v = Math.hypot(robot.vx, robot.vz);
+    if (speed > .8) {
+      if (v < .18) {
+        if (this.stallT === null) this.stallT = state.t;
+        else if (state.t - this.stallT > 1.1) {
+          this.unwedgeUntil = state.t + .9;
+          this.stallT = null;
+          // Repeated wedges on a path goal: the direct line to the next waypoint
+          // is blocked — skip to the following one to re-approach.
+          if (pathKind && goal.path && goal.path.length) {
+            if (this.wedgePos && dist([robot.x, robot.z], this.wedgePos) < 1.2) {
+              if (this.sweep_i < goal.path.length - 1) this.sweep_i++;
+              this.wedgePos = null;
+            } else this.wedgePos = [robot.x, robot.z];
+          }
+        }
+      } else this.stallT = null;
+    }
+    let vx, vz;
+    if (state.t < this.unwedgeUntil) {
+      direction = Math.atan2(-dz, -dx);
+      speed = .9;
+      vx = speed * Math.cos(direction); vz = speed * Math.sin(direction);
+    } else {
+      vx = speed * Math.cos(direction); vz = speed * Math.sin(direction);
+    }
     const margin = Math.hypot(spec.bumper_length, spec.bumper_width) / 2 + .1;
     if (robot.x * vx > 0 && Math.abs(robot.x + vx * .3) > FIELD_X - margin) vx = 0;
     if (robot.z * vz > 0 && Math.abs(robot.z + vz * .3) > FIELD_Z - margin) vz = 0;
     const norm = Math.hypot(vx, vz) / vmax;
     const stick = inverseDeadzone(norm);
-    const sign = robot.alliance === 'blue' ? 1 : -1;
     let x = norm ? sign * stick * vz / Math.hypot(vx, vz) : 0;
     let y = norm ? sign * stick * vx / Math.hypot(vx, vz) : 0;
-    const aim = goal.kind !== 'Collect' ? Math.atan2(hub[1] - robot.z, hub[0] - robot.x) + Math.PI : direction;
-    let turn = inverseDeadzone(Math.max(-1, Math.min(1, -4 * angleError(aim, robot.a) / spec.turn_rate)));
-    if (shooting && !this.recovering) turn = 0;
-    const points = planner.fuelPoints(state);
-    let pathFuel = false;
-    if (points.length) {
-      const c = Math.cos(robot.a), s = Math.sin(robot.a), half = spec.bumper_width / 2;
-      for (const [px, pz] of points) {
-        const rx = px - robot.x, rz = pz - robot.z;
-        const ahead = rx * c + rz * s, side = rx * -s + rz * c;
-        if (ahead > 0 && ahead < 1.2 && Math.abs(side) < half) { pathFuel = true; break; }
-      }
+    // Shooter heading: rear shooters aim away (+pi), front shooters (yawDeg 180) at it.
+    const facesHub = !['Collect', 'Sweep', 'Feed', 'ZoneMow'].includes(goal.kind) && (goal.kind !== 'Patrol' || patrolFiring);
+    const shYaw = Math.PI - (spec.shooter_yaw_deg || 0) * Math.PI / 180;
+    const aim = facesHub ? Math.atan2(hub[1] - robot.z, hub[0] - robot.x) + shYaw : direction;
+    let intake = robot.hopper < planner.capacity(state)
+      && (pathFuel || (['Collect', 'Sweep', 'Patrol', 'Feed', 'ZoneMow'].includes(goal.kind) && !PARAMS.intakeNeedsFuel));
+    if (patrolFiring) intake = false;  // intake blocks the engine's feed while dumping
+    let outtake = false;
+    if (goal.kind === 'SeedMow') {
+      outtake = ownSide;
+      intake = !outtake && robot.hopper < planner.capacity(state);
     }
-    let intake = robot.hopper < planner.capacity(state) && (goal.kind === 'Collect' || pathFuel);
-    if (shooting && state.hubs[robot.alliance].secondsToToggle <= planner.scoreTime(state) + 1) intake = false;
+    if (goal.kind === 'Seed') {
+      intake = false;
+      const distTarget = dist([robot.x, robot.z], goal.point);
+      const aimErr = angleError(aim, robot.a);
+      const nearLine = Math.abs(robot.x) > SCORING_X - 1.4;
+      outtake = distTarget < .9 && Math.abs(aimErr) < .5 && nearLine;
+      if (distTarget < .6) { speed = 0; x = y = 0; }
+    }
+    if (shooting && state.hubs[robot.alliance].active && state.hubs[robot.alliance].secondsToToggle <= planner.scoreTime(state) + 1)
+      intake = false;
     if (shooting && this.recovering) intake = false;
-    const v = Math.hypot(robot.vx, robot.vz);
-    let score = shooting && ownSide && atSpot && low <= distanceHub && distanceHub <= high && v <= scoreSpeed;
-    score = score || (movingShot && v <= scoreSpeed);
+    let score;
+    if (PARAMS.freeFire) {
+      score = active && robot.hopper > 0 && ownSide && low <= distanceHub && distanceHub <= high && v <= PARAMS.freeFireSpeed;
+      intake = robot.hopper < planner.capacity(state);
+    } else {
+      score = shooting && inZone && atSpot && low <= distanceHub && distanceHub <= high && v <= scoreSpeed;
+      score = score || (movingShot && v <= Math.min(scoreSpeed, spec.max_shot_speed * .6));
+      // Press score for the last ~1.5 s of approach: spin-up latches on the
+      // command without paying aim-translation slowdown for the whole leg.
+      if (PARAMS.approachFire && shooting && inZone && low <= distanceHub && distanceHub <= high)
+        score = score || distance < 1.6 || v <= scoreSpeed;
+      if (patrolFiring) score = v <= Math.min(scoreSpeed, PARAMS.patrolFireSpeed);
+    }
+    if (goal.kind === 'Feed') {
+      // Native dump-pass: park ~1 m outside the zone line and hold score; the
+      // engine's FEEDING brain aims at the deep-zone feed targets.
+      score = robot.hopper > 0 && -sign * robot.x < FEED_X && atSpot;
+      intake = false;  // intake blocks the engine's feed while passing
+    } else if (goal.kind === 'ZoneMow') {
+      // Burn the banked pile on the move: turret aims independently; other bots
+      // only release while roughly facing the hub.
+      const hubAim = Math.atan2(hub[1] - robot.z, hub[0] - robot.x) + shYaw;
+      const aligned = spec.turret || Math.abs(angleError(hubAim, robot.a)) < .6;
+      score = robot.hopper > 0 && active && inZone && aligned;
+    }
+    let turn = inverseDeadzone(Math.max(-1, Math.min(1, -4 * angleError(aim, robot.a) / (.45 * spec.turn_rate))));
+    // The engine owns yaw while a shot/pass is commanded (aim assist) — except
+    // turret robots during Collect, where the chassis keeps steering the intake.
+    const steersFree = spec.turret && goal.kind === 'Collect';
+    if (score && !this.recovering && goal.kind !== 'ZoneMow' && !steersFree) turn = 0;
+    if (PARAMS.approachFire && shooting && ownSide && low <= distanceHub && distanceHub <= high && v <= scoreSpeed) turn = 0;
+    if (patrolFiring) turn = 0;
     if (shooting && this.recoveryStage === 1 && state.t < this.reaimUntil) { x = y = 0; score = false; }
     if (shooting && state.t < this.wiggleUntil) {
       const pulse = Math.trunc((this.wiggleUntil - state.t) / .3) % 2 ? 1 : -1;
@@ -284,7 +464,7 @@ export class Driver {
       turn = inverseDeadzone(copysign(.25, pulse));
       score = true;
     }
-    return { x, y, turn, intake, score, outtake: false, climb: false, block: false, stow: false, hood: false, fieldRelative: true };
+    return { x, y, turn, intake, score, outtake, climb: false, block: false, stow: false, hood: false, fieldRelative: true };
   }
 }
 

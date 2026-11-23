@@ -41,6 +41,17 @@ class RobotSpec(Feel):
     total_capacity: int  # hopper plus feed lanes
     autos: list[str]
     brain_equivalents: dict
+    shooter_yaw_deg: float = 0.0  # 180 for front-shooter robots
+    max_pass_speed: float = 1.5  # m/s; engine's speed cap for accurate passes
+    aim_translation_scale: float = 0.5  # engine translation scale while aiming
+    trench_cut: bool = False  # can use the trench tunnel
+    turret: bool = False  # independent aim — chassis yaw free while shooting
+
+    @property
+    def shoot_on_move(self) -> bool:
+        """High maxShotSpeed means the engine velocity-leads shots: firing is
+        accurate while driving (the 'turret' archetype)."""
+        return (self.max_shot_speed or 0) >= 2.0
 
     @classmethod
     def from_spec(cls, spec: dict):
@@ -57,6 +68,11 @@ class RobotSpec(Feel):
             hub_shot=shooting.get("hubShot", {}), fire_rate=spec["fireRate"], intake_rate=spec["intakeRate"],
             hopper_storage_capacity=spec["hopperStorageCapacity"],
             total_capacity=spec["totalCapacity"], autos=brain["autos"], brain_equivalents=equivalents,
+            shooter_yaw_deg=spec.get("shooterYawDeg", 0.0),
+            max_pass_speed=spec.get("maxPassSpeed", 1.5),
+            aim_translation_scale=spec.get("aimTranslationScale", 0.5),
+            trench_cut=spec.get("trenchCut", False),
+            turret=spec.get("turret", False),
         )
 
 

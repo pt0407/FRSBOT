@@ -59,8 +59,8 @@ class ImAI:
             hinted = self.hint(state) if self.hint else None
             self.goal = hinted or self.planner.plan(state)
             self.next_plan = state.t + PARAMS["replan_s"]
-        if state.t >= 160 and self.goal.kind != "Score":
-            return Inputs(field_relative=True)
+        # No hard freeze at t=160 — balls released up to 163 still score through
+        # the settle window, and the planner's own cutoffs gate the last trip.
         inputs = self.driver.act(self.goal, state)
         if self.driver.abandon and state.t + self.planner.score_time(state) + 5 < 163:
             self.collect_until = state.t + 2

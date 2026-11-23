@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 
-from frsbot.bot.planner import FIELD_X, FIELD_Z, SCORING_X, Goal, Planner, angle_error
+from frsbot.bot.planner import FIELD_X, FIELD_Z, SCORING_X, ZONE_X, FEED_X, Goal, Planner, angle_error
 from frsbot.bot.tuning import PARAMS
 from frsbot.core.field import HUB_CENTRES
 from frsbot.core.inputs import Inputs
@@ -40,13 +40,19 @@ class Driver:
         self.recovery_point = None
         self.wiggle_until = 0
         self.abandon = False
-        self.shoot_while_collecting = self.planner.profile.get("shoot_while_collecting", False)
+        # Shoot-on-move robots (maxShotSpeed >= 2) collect and fire together by
+        # default; a profile entry can still force it off.
+        self.shoot_while_collecting = self.planner.profile.get(
+            "shoot_while_collecting", (self.spec.max_shot_speed or 0) >= 2)
         self.reaim_until = 0
+        self.stall_t = None
+        self.unwedge_until = 0
+        self._wedge_pos = None
 
     def progress(self, goal, state):
         robot = state.robots[state.me]
         self.abandon = False
-        scoring = goal.kind == "Score" and state.hubs[robot.alliance].active and robot.hopper > 0
+        scoring = goal.kind == "Score" and self.planner.hub_open(state) and robot.hopper > 0
         if not scoring:
             self.progress_at = None
             self.open_since = None
@@ -112,6 +118,21 @@ class Driver:
         pad = math.hypot(self.spec.bumper_length, self.spec.bumper_width) / 2 + .12
         boxes = [(cx - .597 - pad, cx + .597 + pad, cz - .597 - pad, cz + .597 + pad)
                  for cx, cz, _ in HUB_CENTRES.values()]
+        # Engine geometry (module 2960), rotated (-x,-z) per alliance side:
+        # trench posts x in |3.048..4.242|, |z| in 2.451-2.756 (tall robots can't
+        # pass the 0.565 m bar); tower x |7.12..8.3| z -0.21..+0.79 on blue
+        # (mirrored on red); depot x |7.58..8.3|, blue z -2.46..-1.39.
+        # The bump ramps (|z| 0.597-2.451) are drivable and not obstacles.
+        for s in (-1, 1):
+            if not self.spec.trench_cut:
+                plo, phi = min(s * 3.048, s * 4.242), max(s * 3.048, s * 4.242)
+                boxes += [(plo, phi, 2.40, 2.85), (plo, phi, -2.85, -2.40)]
+            tlo, thi = min(s * 7.12, s * 8.35), max(s * 7.12, s * 8.35)
+            dlo, dhi = min(s * 7.55, s * 8.35), max(s * 7.55, s * 8.35)
+            if s == -1:
+                boxes += [(tlo, thi, -.25, .83), (dlo, dhi, -2.5, -1.35)]
+            else:
+                boxes += [(tlo, thi, -.83, .25), (dlo, dhi, 1.35, 2.5)]
         for left, right, bottom, top in boxes:
             if left < start[0] < right and bottom < start[1] < top:
                 return min([(left - .08, start[1]), (right + .08, start[1]),
@@ -127,7 +148,13 @@ class Driver:
             if cost > best.get(index, math.inf):
                 continue
             for j, point in enumerate(nodes):
-                if j == index or any(intersects(nodes[index], point, box) for box in boxes):
+                if j == index:
+                    continue
+                # Edges into the target may end inside the box containing it;
+                # every other box still blocks.
+                blockers = boxes if j != 1 else [b for b in boxes
+                    if not (b[0] < target[0] < b[1] and b[2] < target[1] < b[3])]
+                if any(intersects(nodes[index], point, box) for box in blockers):
                     continue
                 new_cost = cost + math.dist(nodes[index], point)
                 if new_cost < best.get(j, math.inf):
@@ -138,41 +165,144 @@ class Driver:
     def act(self, goal: Goal, state):
         goal = self.progress(goal, state)
         robot = state.robots[state.me]
-        active = state.hubs[robot.alliance].active
+        active = self.planner.hub_open(state)
         hub = self.planner.hub(state)
         low, high = self.planner.bounds()
         distance_hub = math.hypot(robot.x - hub[0], robot.z - hub[1])
         shooting = goal.kind == "Score" and active and robot.hopper > 0
+        sign = 1 if robot.alliance == "blue" else -1
         own_side = robot.x < -SCORING_X if robot.alliance == "blue" else robot.x > SCORING_X
+        in_zone = -sign * robot.x > ZONE_X - .34  # bumper-edge legality (~|x| 3.9)
         at_spot = math.dist((robot.x, robot.z), goal.point) < .7
         target = goal.point
-        point = self.waypoint((robot.x, robot.z), target)
+        if goal.kind in ("Sweep", "Patrol", "SeedMow") and goal.path:
+            if goal is not getattr(self, "_sweep_goal", None):
+                self._sweep_goal = goal
+                self.sweep_i = 0
+            i = self.sweep_i
+            while i < len(goal.path) - 1 and (math.dist((robot.x, robot.z), goal.path[i]) < .55 or
+                    math.dist((robot.x, robot.z), goal.path[i + 1]) + .4 < math.dist((robot.x, robot.z), goal.path[i])):
+                i += 1
+            self.sweep_i = i
+            point = self.waypoint((robot.x, robot.z), goal.path[i])
+            if point == (robot.x, robot.z):
+                point = goal.path[i]
+        elif goal.kind == "Score" and math.dist((robot.x, robot.z), target) < 2.0:
+            point = target
+        else:
+            point = self.waypoint((robot.x, robot.z), target)
         dx, dz = point[0] - robot.x, point[1] - robot.z
         distance = math.hypot(dx, dz)
         direction = math.atan2(dz, dx)
+        points = self.planner.fuel_points(state)
+        path_fuel = False
+        mow_dir = None
+        if len(points):
+            rel = points - [robot.x, robot.z]
+            ahead = rel @ np.array([math.cos(robot.a), math.sin(robot.a)])
+            lateral = rel @ np.array([-math.sin(robot.a), math.cos(robot.a)])
+            cone = (ahead > 0) & (ahead < 1.6) & (abs(lateral) < self.spec.bumper_width * .6)
+            path_fuel = bool(np.any((ahead > 0) & (ahead < 1.2) & (abs(lateral) < self.spec.bumper_width / 2)))
+            if cone.sum() >= PARAMS["mow_cone_min"]:
+                m = rel[cone].mean(axis=0)
+                mow_dir = math.atan2(m[1], m[0])
+        if goal.kind in ("Collect", "Patrol", "ZoneMow", "Feed") and mow_dir is not None:
+            point = (robot.x + 2.5 * math.cos(mow_dir), robot.z + 2.5 * math.sin(mow_dir))
+            dx, dz = point[0] - robot.x, point[1] - robot.z
+            distance = math.hypot(dx, dz)
+            direction = mow_dir
+        elif goal.kind in ("Collect", "Patrol", "ZoneMow", "Feed") and distance < .6 and path_fuel:
+            point = (robot.x + 1.2 * math.cos(robot.a), robot.z + 1.2 * math.sin(robot.a))
+            dx, dz = point[0] - robot.x, point[1] - robot.z
+            distance = math.hypot(dx, dz)
+            direction = math.atan2(dz, dx)
         moving_shot = (self.shoot_while_collecting and goal.kind == "Collect" and active and own_side
                        and robot.hopper > 0 and (self.spec.max_shot_speed or 0) >= 2
                        and low + .2 <= distance_hub <= high - .5)
+        # Patrol FSM at the seeded pile: `fire` parks rear-to-hub and dumps
+        # stationary (the engine feed dies at v>~0.3 and while intaking); `fill`
+        # noses into the pile and vacuums it back up. Alternates on hopper level.
+        patrol_firing = False
+        if goal.kind == "Patrol":
+            if getattr(self, "_patrol_st", "fire") == "fire":
+                if not (own_side and low <= distance_hub <= high) or robot.hopper <= PARAMS["patrol_low"]:
+                    self._patrol_st = "fill"
+            elif robot.hopper >= PARAMS["patrol_high"] or not len(self.planner.inzone_fuel(state)):
+                self._patrol_st = "fire"
+            patrol_firing = self._patrol_st == "fire" and own_side and active and robot.hopper > 0 and low <= distance_hub <= high
         arriving = distance < .3
         final_waypoint = math.dist(point, target) < .01
         vmax = self.spec.max_speed
         # Conservative stopping distance also leaves room for the engine's velocity response.
-        speed = min(vmax, PARAMS["drive_dist_gain"] * distance,
-                    math.sqrt(2 * self.spec.accel * PARAMS["drive_brake_frac"] * max(0, distance - .12)))
-        if goal.kind == "Collect":
+        brake_dist = distance
+        if goal.kind in ("Sweep", "Patrol", "SeedMow") and goal.path:
+            brake_dist = distance + sum(math.dist(goal.path[j], goal.path[j + 1])
+                                        for j in range(self.sweep_i, len(goal.path) - 1))
+        speed = min(vmax, PARAMS["drive_dist_gain"] * brake_dist,
+                    math.sqrt(2 * self.spec.accel * PARAMS["drive_brake_frac"] * max(0, brake_dist - .12)))
+        if goal.kind == "Sweep":
+            speed = min(speed, vmax * PARAMS["sweep_speed_frac"])
+        elif goal.kind == "ZoneMow":
+            speed = min(speed, vmax * PARAMS["zone_speed_frac"])
+        elif goal.kind == "Patrol":
+            cap = vmax * PARAMS["patrol_speed_frac"]
+            # Stay safely under the fire-speed gate so `score` never flickers off
+            # mid-cycle; flickering keeps the engine's feed closed (~2/s release).
+            if robot.hopper > 0 and own_side and active and low <= distance_hub <= high:
+                cap = min(cap, PARAMS["patrol_fire_speed"] * .85)
+            speed = min(speed, cap)
+            if patrol_firing:
+                speed = 0  # park dead still — the feed dies at v>~0.3
+        elif goal.kind == "SeedMow":
+            speed = min(speed, vmax * PARAMS["seed_speed_frac"])
+        if goal.kind in ("Collect", "Patrol", "ZoneMow", "Feed"):
             if distance < 1:
+                speed = min(speed, vmax * PARAMS["collect_near_frac"])
+            elif mow_dir is not None:
+                speed = min(speed, vmax * PARAMS["mow_speed_frac"])
+            if goal.kind in ("Collect", "ZoneMow", "Feed"):
+                speed *= max(PARAMS["collect_cos_floor"], math.cos(angle_error(direction, robot.a)))
+        elif goal.kind in ("Sweep",):
+            if brake_dist < 1:
                 speed = min(speed, vmax * PARAMS["collect_near_frac"])
             speed *= max(PARAMS["collect_cos_floor"], math.cos(angle_error(direction, robot.a)))
         if arriving and final_waypoint:
             speed = 0
+            if goal.kind in ("Collect", "Patrol") and path_fuel:
+                speed = .6
         elif arriving:
             speed = max(speed, .35)
         score_speed = self.spec.max_shot_speed or self.spec.brain_equivalents.get("scoreSpeedTol", .15)
         if moving_shot:
-            speed = min(speed, score_speed * .85)
+            speed = min(speed, min(score_speed, self.spec.max_shot_speed * .6))
         if shooting and final_waypoint and low <= distance_hub <= high and distance < .6:
-            speed = min(speed, score_speed * .5)
-        vx, vz = speed * math.cos(direction), speed * math.sin(direction)
+            speed = 0  # stop dead so the engine's hold/firing/xLock engages
+        actual_v = math.hypot(robot.vx, robot.vz)
+        if speed > .8:
+            if actual_v < .18:
+                if self.stall_t is None:
+                    self.stall_t = state.t
+                elif state.t - self.stall_t > 1.1:
+                    self.unwedge_until = state.t + .9
+                    self.stall_t = None
+                    # Repeated wedges on a path goal: the direct line to the next
+                    # waypoint is blocked — skip to the following one to re-approach
+                    # from a different angle instead of ramming the same spot.
+                    if goal.kind in ("Sweep", "Patrol", "SeedMow") and goal.path:
+                        if self._wedge_pos and math.dist((robot.x, robot.z), self._wedge_pos) < 1.2:
+                            if self.sweep_i < len(goal.path) - 1:
+                                self.sweep_i += 1
+                            self._wedge_pos = None
+                        else:
+                            self._wedge_pos = (robot.x, robot.z)
+            else:
+                self.stall_t = None
+        if state.t < self.unwedge_until:
+            direction = math.atan2(-dz, -dx)
+            speed = .9
+            vx, vz = speed * math.cos(direction), speed * math.sin(direction)
+        else:
+            vx, vz = speed * math.cos(direction), speed * math.sin(direction)
         margin = math.hypot(self.spec.bumper_length, self.spec.bumper_width) / 2 + .1
         if robot.x * vx > 0 and abs(robot.x + vx * .3) > FIELD_X - margin:
             vx = 0
@@ -180,28 +310,75 @@ class Driver:
             vz = 0
         norm = math.hypot(vx, vz) / vmax
         stick = inverse_deadzone(norm)
-        sign = 1 if robot.alliance == "blue" else -1
         x = sign * stick * vz / math.hypot(vx, vz) if norm else 0
         y = sign * stick * vx / math.hypot(vx, vz) if norm else 0
-        aim = math.atan2(hub[1] - robot.z, hub[0] - robot.x) + math.pi if goal.kind != "Collect" else direction
-        turn = inverse_deadzone(max(-1, min(1, -4 * angle_error(aim, robot.a) / self.spec.turn_rate)))
-        # Generic score controls its own aim; recovery explicitly faces the hub at rest.
-        if shooting and not self.recovering:
-            turn = 0
-        points = self.planner.fuel_points(state)
-        path_fuel = False
-        if len(points):
-            rel = points - [robot.x, robot.z]
-            ahead = rel @ np.array([math.cos(robot.a), math.sin(robot.a)])
-            side = rel @ np.array([-math.sin(robot.a), math.cos(robot.a)])
-            path_fuel = bool(np.any((ahead > 0) & (ahead < 1.2) & (abs(side) < self.spec.bumper_width / 2)))
-        intake = robot.hopper < self.planner.capacity(state) and (path_fuel or (goal.kind == "Collect" and not PARAMS["intake_needs_fuel"]))
-        if shooting and state.hubs[robot.alliance].seconds_to_toggle <= self.planner.score_time(state) + 1:
+        # Shooter heading: rear shooters aim away from the hub (+pi), front
+        # shooters (shooterYawDeg 180) aim at it, shifted by the mount yaw.
+        faces_hub = goal.kind not in ("Collect", "Sweep", "Feed", "ZoneMow") and (goal.kind != "Patrol" or patrol_firing)
+        aim = (math.atan2(hub[1] - robot.z, hub[0] - robot.x) + math.pi - math.radians(self.spec.shooter_yaw_deg)
+               if faces_hub else direction)
+        intake = robot.hopper < self.planner.capacity(state) and (path_fuel or (goal.kind in ("Collect", "Sweep", "Patrol", "Feed", "ZoneMow") and not PARAMS["intake_needs_fuel"]))
+        if patrol_firing:
+            intake = False  # intake blocks the engine's feed — keep it off while dumping
+        outtake = False
+        if goal.kind == "SeedMow":
+            # The outtake is a ~1.5-2.5 m disc around the robot — spray only while
+            # in-zone (own_side) so the disc lands inside the patrol band.
+            outtake = own_side
+            intake = not outtake and robot.hopper < self.planner.capacity(state)
+        if goal.kind == "Seed":
+            intake = False
+            dist_target = math.dist((robot.x, robot.z), goal.point)
+            aim_err = angle_error(aim, robot.a)
+            # Spray reaches ~3 m: parking just outside the line and facing -x
+            # throws the pile into the deep zone; no own_side requirement.
+            near_line = abs(robot.x) > SCORING_X - 1.4
+            outtake = dist_target < .9 and abs(aim_err) < .5 and near_line
+            if dist_target < .6:
+                speed = 0
+                norm = 0
+                x = y = 0
+        if shooting and state.hubs[robot.alliance].active and state.hubs[robot.alliance].seconds_to_toggle <= self.planner.score_time(state) + 1:
             intake = False
         if shooting and self.recovering:
             intake = False
-        score = shooting and own_side and at_spot and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= score_speed
-        score = score or moving_shot and math.hypot(robot.vx, robot.vz) <= score_speed
+        if PARAMS["free_fire"]:
+            score = active and robot.hopper > 0 and own_side and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= PARAMS["free_fire_speed"]
+            intake = robot.hopper < self.planner.capacity(state)
+        else:
+            score = shooting and in_zone and at_spot and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= score_speed
+            score = score or moving_shot and math.hypot(robot.vx, robot.vz) <= min(score_speed, self.spec.max_shot_speed * .6)
+            # Press score for the last ~1.5 s of approach: hood/flywheel/tag
+            # spin-up latches on the command and is ready on arrival without
+            # paying the aim-translation slowdown for the whole leg.
+            if PARAMS["approach_fire"] and shooting and in_zone and low <= distance_hub <= high:
+                score = score or distance < 1.6 or math.hypot(robot.vx, robot.vz) <= score_speed
+            if patrol_firing:
+                score = math.hypot(robot.vx, robot.vz) <= min(score_speed, PARAMS["patrol_fire_speed"])
+        if goal.kind == "Feed":
+            # Native dump-pass: park ~1 m outside the zone line and hold score;
+            # the engine's FEEDING brain aims at the deep-zone feed targets.
+            score = robot.hopper > 0 and -sign * robot.x < FEED_X and at_spot
+            intake = False  # intake blocks the engine's feed while passing
+        elif goal.kind == "ZoneMow":
+            # Burn the banked pile on the move: turret aims independently; other
+            # bots only release while roughly facing the hub.
+            hub_aim = math.atan2(hub[1] - robot.z, hub[0] - robot.x) + math.pi - math.radians(self.spec.shooter_yaw_deg)
+            aligned = self.spec.turret or abs(angle_error(hub_aim, robot.a)) < .6
+            score = robot.hopper > 0 and active and in_zone and aligned
+        # Engine applies a 0.45 factor to the manual turn rate — divide it out so
+        # the P-gain commands the intended omega and doesn't stall ~2.2x early.
+        turn = inverse_deadzone(max(-1, min(1, -4 * angle_error(aim, robot.a) / (.45 * self.spec.turn_rate))))
+        # The engine owns yaw while a shot/pass is commanded (aim assist) — except
+        # turret robots during Collect, where the turret aims and the chassis
+        # keeps steering for the intake line.
+        steers_free = self.spec.turret and goal.kind == "Collect"
+        if score and not self.recovering and goal.kind != "ZoneMow" and not steers_free:
+            turn = 0
+        if PARAMS["approach_fire"] and shooting and own_side and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= score_speed:
+            turn = 0
+        if patrol_firing:
+            turn = 0
         if shooting and self.recovery_stage == 1 and state.t < self.reaim_until:
             x = y = 0
             score = False
@@ -211,4 +388,4 @@ class Driver:
             x = 0
             turn = inverse_deadzone(math.copysign(.25, pulse))
             score = True
-        return Inputs(x=x, y=y, turn=turn, intake=intake, score=score, field_relative=True)
+        return Inputs(x=x, y=y, turn=turn, intake=intake, score=score, outtake=outtake, field_relative=True)

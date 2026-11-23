@@ -25,6 +25,7 @@ AUTO_END = 20.0
 LOOKAHEAD_S = 0.5
 FIELD_F, FIELD_Y = 16.540988, 8.069326
 HUB_X = {"blue": -3.645, "red": 3.645}
+ZONE_X = 4.2418
 
 
 def wrap(a):
@@ -60,7 +61,7 @@ class AutoRoute:
     def _hopper_delta(self, t):
         """Predicted pro hopper change over the next ~1 s at time t."""
         j = min(len(self._hp) - 1, bisect.bisect_left(self._hp, t))
-        j2 = min(len(self._hp) - 1, j + 30)
+        j2 = min(len(self._hp) - 1, j + 5)  # ~0.15 s lookahead, not 1.0 s — release detection was braking early
         return self.hopper[j2][1] - self.hopper[j][1], self.hopper[j][1]
 
     def act(self, state):
@@ -84,13 +85,15 @@ class AutoRoute:
         inputs = Inputs(x=sign * stick * vz / norm, y=sign * stick * vx / norm, field_relative=True)
         hub_x = HUB_X[al]
         if releasing:
-            aim = wrap(math.atan2(0 - r.z, hub_x - r.x) + math.pi)
-        inputs.turn = inverse_deadzone(max(-1.0, min(1.0, -4 * angle_error(aim, r.a) / self.spec.turn_rate)))
+            aim = wrap(math.atan2(0 - r.z, hub_x - r.x) + math.pi - math.radians(self.spec.shooter_yaw_deg))
         hub = state.hubs[al]
         distance_hub = math.hypot(r.x - hub_x, r.z)
-        own_side = (r.x < 0) if al == "blue" else (r.x > 0)
+        own_side = (r.x < -ZONE_X + .34) if al == "blue" else (r.x > ZONE_X - .34)
         settled = math.hypot(r.vx, r.vz) < 0.35
         inputs.score = (releasing and hub.active and own_side and 1.0 <= distance_hub <= 6.0
                         and r.hopper > 0 and (settled or dist < 0.4))
+        # Manual turn fights the engine's aim assist while score is held.
+        inputs.turn = 0.0 if inputs.score else inverse_deadzone(
+            max(-1.0, min(1.0, -4 * angle_error(aim, r.a) / (.45 * self.spec.turn_rate))))
         inputs.intake = not inputs.score and (d >= 1 or r.hopper < pro_hopper - 5)
         return inputs

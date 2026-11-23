@@ -31,6 +31,9 @@ class PagePlanner:
         self.bot = ImAI(spec)
         self.sink = GoalSink()
         self.bot.driver = self.sink
+        # The page driver only understands goals — the open-loop auto route emits
+        # raw Inputs and would starve it for the first 20 s.
+        self.bot.auto = None
 
     def plan(self, state, status):
         self.sink.goal = None

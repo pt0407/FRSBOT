@@ -103,6 +103,7 @@ export async function loadEngine(directory = DEFAULT_DIR) {
             preload: r.preload ?? 8, local: id === config.ego })),
           seed: config.seed, auto: config.auto, event: config.event, solo: config.robots.length === 1,
           hpThrows: config.hp, hpUnloads: config.unload, freeplay: config.freeplay,
+          ...(config.builderAuto ? { builderAuto: config.builderAuto } : {}),
         });
         return { sim, config };
       },
