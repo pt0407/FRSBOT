@@ -118,3 +118,12 @@ Bot hub state is computed from the same schedule, not measured per frame.
 `active_score_frac=0.3` (score when the hopper reaches 30% during active hub time) on the full protocol:
 mean 454.3 vs 530.2 baseline (254 512.0, 2910 408.7, 1114 537.0, 4414 537.8, 60026 276.2). Much worse.
 Scoring earlier is not the fix. Default remains 0.85.
+
+## Early-scoring window (auto/transition/first active shift)
+
+`early_score_until=33` forces the bot to score whenever its hub is active before 33 s. Full protocol mean
+467.4 vs 530.2 baseline (254 520.7, 2910 451.7, 1114 536.5, 4414 556.3, 60026 272.0). Worse on every team.
+Default stays 0 (off).
+
+Replay event log check (pro CLHNB666, 1250): 1075 points scored while blue was active, 175 while inactive,
+all within about 4 s of deactivation (the grace period). The late stationary drops in S1 and S3 score nothing.
