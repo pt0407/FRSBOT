@@ -65,6 +65,19 @@ assert.equal(api.pad.axes[1], -1);
 document.hidden = true; documentListeners.visibilitychange(); neutral();
 document.hidden = false; documentListeners.visibilitychange();
 assert.throws(() => api.writePad({ axes: [], buttons: [] }), /invalid pad/); neutral();
+assert.throws(() => api.writePad({ ...pad, buttons: Array(17).fill(null) }), /invalid pad/); neutral();
+for (const [send, message] of [
+  [() => listeners.error({ message: 'page failed' }), 'page failed'],
+  [() => listeners.unhandledrejection({ reason: 'rejected' }), 'rejected'],
+  [() => worker.listeners.error({ message: 'worker failed' }), 'worker failed'],
+  [() => worker.listeners.messageerror({ message: 'clone failed' }), 'clone failed'],
+]) {
+  api.writePad(pad);
+  send(); neutral();
+  assert.equal(api.error, message);
+  api.writePad(pad); neutral();
+  api.error = null;
+}
 worker.postMessage({ t: 'input', input: { fieldRelative: true, y: 1 } });
 assert.equal(api.inputs[0].input.y, 1);
 worker.receive({ t: 'frame', meta: { ...meta(0), phase: 'done' }, buf: new ArrayBuffer(0) });

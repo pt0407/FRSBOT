@@ -30,7 +30,7 @@
     },
     writePad({ axes, buttons }) {
       if (!Array.isArray(axes) || axes.length !== 4 || axes.some(x => !Number.isFinite(x)) ||
-          !Array.isArray(buttons) || buttons.length !== 17) {
+          !Array.isArray(buttons) || buttons.length !== 17 || buttons.some(b => !b || typeof b !== 'object')) {
         api.zero();
         throw new Error('invalid pad');
       }
@@ -50,10 +50,13 @@
         error: api.error, fieldRelativeError: api.fieldRelativeError, blocked: api.blocked, ended: api.ended };
     },
   };
+  const fail = error => { api.error = String(error.message || error); api.zero(); };
   const NativeWorker = window.Worker;
   window.Worker = class extends NativeWorker {
     constructor(url, options) {
       super(url, options);
+      this.addEventListener('error', fail);
+      this.addEventListener('messageerror', fail);
       this.addEventListener('message', event => {
         const m = event.data, at = performance.now();
         try {
@@ -94,6 +97,8 @@
     return [pad, null, null, null];
   } });
   window.addEventListener('blur', () => { api.blocked = true; api.zero(); });
+  window.addEventListener('error', fail);
+  window.addEventListener('unhandledrejection', event => fail(event.reason || 'unhandled rejection'));
   window.addEventListener('focus', () => { api.blocked = document.hidden; });
   document.addEventListener('visibilitychange', () => { api.blocked = document.hidden; if (api.blocked) api.zero(); });
 })();

@@ -21,6 +21,12 @@ from frsbot.sim.wasm_env import view_to_state
 INJECT = Path(__file__).with_name("inject.js")
 ROOT = Path(__file__).resolve().parents[2]
 LOG = logging.getLogger(__name__)
+GRAPHICS = """() => {
+    localStorage.setItem('frc-sim.graphics', 'low');
+    localStorage.setItem('rebuilt-sim.settings', JSON.stringify({version: 1, state: {
+        showBackground: false, motionBlur: false, sponsorLogos: false, fpsCap: 60, screamTroll: false
+    }}));
+}"""
 
 
 def state_summary(state):
@@ -80,7 +86,7 @@ async def drive(page, spec, alliance, output, run_id, timeout=300):
                 acts += 1
                 record(dict(kind="step", t=state.t, wall_time=time.time(), seq=seq,
                             received=frame["received"], state=state_summary(state), inputs=asdict(inputs),
-                            blocked=packet["blocked"]))
+                            blocked=packet["blocked"], sent_input=packet["input"]))
                 if state.phase == Phase.DONE:
                     break
             await asyncio.sleep(max(0, 1 / 30 - (time.monotonic() - tick)))
@@ -89,6 +95,7 @@ async def drive(page, spec, alliance, output, run_id, timeout=300):
         await write_pad(page, Inputs())
         await page.locator("button").filter(has_text="Play again").wait_for(timeout=30000)
         await page.wait_for_function("!Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('Counting'))", timeout=30000)
+        await page.set_viewport_size(dict(width=1280, height=720))
         text = await page.locator("body").inner_text()
         screenshot = output / f"{run_id}-end.png"
         await page.screenshot(path=str(screenshot), full_page=True)
@@ -118,7 +125,9 @@ async def run(args, spec):
         try:
             page = await browser.new_page(viewport=dict(width=640, height=360), device_scale_factor=1)
             await page.add_init_script(path=str(INJECT))
+            await page.add_init_script(script=f"({GRAPHICS})()")
             await start_solo(page, spec.team, args.alliance)
+            await page.set_viewport_size(dict(width=320, height=180))
             return await drive(page, spec, args.alliance, args.out, run_id)
         finally:
             if page is not None and not page.is_closed():
