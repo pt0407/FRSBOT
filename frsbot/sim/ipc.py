@@ -20,7 +20,7 @@ from frsbot.sim.engine.fetch import ENGINE_DIR
 VEC_SERVER = Path(__file__).resolve().parent / "engine" / "vec_server.mjs"
 OP_NEW, OP_STEP, OP_STATE, OP_CLOSE, OP_EXIT = 1, 2, 3, 4, 5
 CMD_INPUTS, CMD_GOAL, CMD_IDLE = 0, 1, 2
-HEADER, ROBOT, MAX_ROBOTS = 24, 24, 6
+HEADER, ROBOT, MAX_ROBOTS = 24, 25, 6
 PHASES = list(Phase)
 SCORE_KEYS = ("autoFuel", "teleFuel", "inactiveFuel", "towerAuto", "towerTele", "foulPoints", "total")
 GATE_KEYS = ("open", "hood", "flywheel", "range", "heading", "speed", "tag")
@@ -88,7 +88,8 @@ def decode_block(buf: memoryview, at: int, modes: dict[int, str], freeplay: bool
         robots.append(RobotState(int(r[0]), int(r[1]), ALLIANCES[int(r[2])], float(r[4]), float(r[6]),
                                  math.pi - 2 * math.atan2(qy, qw), float(r[11]), float(r[13]), int(r[14]), int(r[15]),
                                  gate=gate, mode=modes.get(int(r[17]))))
-        driver.append(dict(abandoned=bool(r[18]), recovering=bool(r[19]), stage=int(r[20]), scored=int(r[21]), command=int(r[22])))
+        driver.append(dict(abandoned=bool(r[18]), recovering=bool(r[19]), stage=int(r[20]), scored=int(r[21]), command=int(r[22]),
+                           fouls=int(r[24])))
     base = at + (HEADER + ROBOT * MAX_ROBOTS) * 8
     pos = np.frombuffer(buf, np.float32, count * 3, base).reshape(count, 3).copy()
     where = np.frombuffer(buf, np.uint8, count, base + count * 12).copy()

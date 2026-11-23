@@ -67,7 +67,10 @@ class FakeEnv:
         self.resets = []
         self.count = 0
 
-    def reset(self, robots, ego, **kwargs):
+    def reset(self, configs):
+        config = dict(configs[0])
+        robots, ego = config.pop("robots"), config.pop("ego")
+        kwargs = config
         self.resets.append((robots, ego, kwargs))
         self.slots, self.ego, self.count = robots, ego, 0
         entities = [RobotState(10+i, slot.team, slot.alliance, -6. if slot.alliance == "blue" else 6.,
@@ -75,20 +78,20 @@ class FakeEnv:
                     for i, slot in enumerate(robots)]
         self.state = GameState(0., Phase.AUTO, {a: HubState(True, 20.) for a in ("blue", "red")}, entities,
                                FuelState(np.empty((0, 3), np.float32), np.empty(0, np.uint8)), ego)
-        return self.state
+        return [self.state]
 
-    def step(self, actions, ticks):
-        assert set(actions) == {self.ego} and ticks == 3
-        for i, slot in enumerate(self.slots):
-            if i != self.ego:
-                assert isinstance(slot.policy.act(self.state_for(i), {"scored": 0}), Inputs)
-        self.count += 1
-        self.state = replace(self.state, t=self.count * .05)
-        # A teammate (not ego) commits this foul; its points are credited to red.
-        event = dict(t="foul", by=self.state.robots[1].id, alliance="red", points=15, rule="G418")
-        return SimpleNamespace(t=self.state.t, views={i: self.state_for(i) for i in range(len(self.slots))},
-                               scores={"blue": 2*self.count, "red": self.count}, done=False, events=[event],
-                               observation=SimpleNamespace(driver=[{"scored": 3*self.count}] * len(self.slots)))
+    def rollout(self, seconds, ticks):
+        assert ticks == 3
+        while self.state.t < seconds - 1e-7:
+            for i, slot in enumerate(self.slots):
+                assert isinstance(slot.policy.act(self.state_for(i), {"scored": 3*self.count, "fouls": 0}), Inputs)
+            self.count += 1
+            self.state = replace(self.state, t=self.count * .05)
+        # A teammate (not ego) commits fouls; the points are awarded to red.
+        return [SimpleNamespace(t=self.state.t, views={i: self.state_for(i) for i in range(len(self.slots))},
+                                scores={"blue": 2*self.count, "red": self.count}, done=False,
+                                breakdowns={"blue": {"foulPoints": 0}, "red": {"foulPoints": 15*self.count}},
+                                observation=SimpleNamespace(driver=[{"scored": 3*self.count, "fouls": 0}] * len(self.slots)))]
 
     def state_for(self, i):
         return replace(self.state, me=i)
@@ -101,7 +104,7 @@ def test_play_api_metrics_alliance_fouls_and_paired_setup():
     pure = evaluation.play(env, lineup, ego, 1, False, specs, opponent_defender=True, duration=.1)
     strategic = evaluation.play(env, lineup, ego, 1, True, specs, opponent_defender=True, duration=.1)
     assert pure["foul_points_conceded"] == strategic["foul_points_conceded"] == 30
-    assert pure["our_fouls"] == strategic["our_fouls"] == []
+    assert pure["our_fouls"] == strategic["our_fouls"] == 0
     assert pure["robot_fuel"] == strategic["robot_fuel"] == 6
     assert pure["margin"] == strategic["margin"] == 2
     assert sum(strategic["role_fractions"].values()) == pytest.approx(1)
@@ -112,6 +115,11 @@ def test_play_api_metrics_alliance_fouls_and_paired_setup():
     assert opponent.policy.bot.layer.role(None).target == env.state.robots[ego].id
     with pytest.raises(ValueError, match="duration"):
         evaluation.play(env, lineup, ego, 1, False, specs, duration=0)
+
+    red_lineup, red_ego = evaluation.composition("2v2", 2)
+    red = evaluation.play(env, red_lineup, red_ego, 2, False, specs, duration=.1)
+    assert red["foul_points_conceded"] == 0
+    assert red["margin"] == -2
 
 
 def test_cli_rejects_empty_seed_set(monkeypatch):

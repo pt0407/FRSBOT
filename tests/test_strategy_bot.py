@@ -11,7 +11,8 @@ from frsbot.core.inputs import Inputs
 from frsbot.core.specs import load_specs
 from frsbot.core.state import FuelState, GameState, HubState, RobotState
 from frsbot.sim.engine.fetch import ENGINE_DIR
-from frsbot.sim.multi_env import MultiWasmEnv, RobotSlot
+from frsbot.sim.vec_env import RobotSlot
+from frsbot.sim.wasm_env import WasmEnv
 from frsbot.strategy import fouls
 from frsbot.strategy.bot import NEW_GOAL_KINDS, StrategicImAI
 from frsbot.strategy.driver import LANE_BOXES, StrategicDriver, half_diagonal, inside
@@ -205,8 +206,8 @@ engine = pytest.mark.skipif(not (ENGINE_DIR / "manifest.json").is_file(), reason
 @engine
 @pytest.mark.parametrize("team", [254, 2910])
 def test_native_pass_lands_in_own_zone(team, capsys):
-    with MultiWasmEnv() as env:
-        s = env.reset([RobotSlot(team=team, alliance="blue", start=dict(fx=2, fy=1.8, headingDeg=0))],
+    with WasmEnv() as env:
+        s = env.reset(robots=[RobotSlot(team=team, alliance="blue", start=dict(fx=2, fy=1.8, headingDeg=0))],
                            seed=7, hp=False, unload=False)
         carried = np.flatnonzero(s.fuel.where == 2)
         assert len(carried) == 8
@@ -229,26 +230,25 @@ def test_native_pass_lands_in_own_zone(team, capsys):
 def test_defender_engine_smoke(specs, capsys):
     results = []
     for defended in (False, True):
-        with MultiWasmEnv() as env:
-            env.reset([RobotSlot(team=254, alliance="blue", start=dict(fx=1.5, fy=2, headingDeg=0)),
+        with WasmEnv() as env:
+            env.reset(robots=[RobotSlot(team=254, alliance="blue", start=dict(fx=1.5, fy=2, headingDeg=0)),
                        RobotSlot(team=2910, alliance="red", start=dict(fx=15, fy=2, headingDeg=0))], seed=7)
             states = env.step({}, 1500).views
             bot, opponent = StrategicImAI(specs[254]), ImAI(specs[2910])
             force(bot, Role("Defender", 1))
-            before = next(d["fuel"] for d in env.view["drivers"] if d["robot"] == 1)
-            fouls_by_me = []
+            before = env.observation.driver[1]["scored"]
             minimum_distance = math.inf
             for _ in range(800):
                 inputs = {1: opponent.act(states[1])}
                 if defended:
                     inputs[0] = bot.act(states[0])
                 states = env.step(inputs, 3).views
-                fouls_by_me.extend(e for e in env.view["events"] if e["t"] == "foul" and e["by"] == 0)
                 a, b = states[0].robots
                 minimum_distance = min(minimum_distance, math.hypot(a.x-b.x, a.z-b.z))
-            after = next(d["fuel"] for d in env.view["drivers"] if d["robot"] == 1)
-            results.append((after - before, len(fouls_by_me), minimum_distance))
-            assert fouls_by_me == []
+            after = env.observation.driver[1]["scored"]
+            fouls_by_me = env.observation.driver[0]["fouls"]
+            results.append((after - before, fouls_by_me, minimum_distance))
+            assert fouls_by_me == 0
     with capsys.disabled():
         print(f"\nDefense smoke seed=7 t=25..65: baseline={results[0][0]} FUEL ({results[0][0]/40:.3f}/s), "
               f"defended={results[1][0]} FUEL ({results[1][0]/40:.3f}/s), fouls_by_defender={results[1][1]}, "

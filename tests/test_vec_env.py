@@ -50,6 +50,23 @@ def test_replay_policy_follows_recording():
 
 
 @needs_engine
+def test_cumulative_robot_fouls_and_alliance_credit_reset():
+    with WasmEnv() as env:
+        env.reset(robots=[RobotSlot(254, a, dict(fx=x, fy=7.4, headingDeg=0))
+                          for a, x in [("blue", 7.5), ("red", 9)]], hp=False)
+        assert all(d["fouls"] == 0 for d in env.observation.driver)
+        result = env.step({0: Inputs(y=1, field_relative=True)}, ticks=600)
+        counts = [d["fouls"] for d in result.observation.driver]
+        assert counts[0] >= 2 and counts[1] == 0
+        assert result.breakdowns["red"]["foulPoints"] >= 45
+        assert result.breakdowns["blue"]["foulPoints"] == 0
+        result = env.step({}, ticks=1)
+        assert [d["fouls"] for d in result.observation.driver] == counts
+        env.reset(team=254)
+        assert env.observation.driver[0]["fouls"] == 0
+
+
+@needs_engine
 def test_multi_robot_views_scores_and_policies():
     robots = [RobotSlot(254, "blue"), RobotSlot(2910, "red", policy=GoalImAIPolicy(SPECS[2910])),
               RobotSlot(1114, "blue", policy=ImAIPolicy(SPECS[1114])), RobotSlot(4414, "red")]

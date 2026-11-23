@@ -6,7 +6,7 @@ import { DEFAULT_DIR, loadEngine } from './loader.mjs';
 import { Driver, GOAL_KINDS, viewToState } from './driver.mjs';
 
 export const OP = { NEW: 1, STEP: 2, STATE: 3, CLOSE: 4, EXIT: 5 };
-export const HEADER = 24, ROBOT = 24, MAX_ROBOTS = 6;
+export const HEADER = 24, ROBOT = 25, MAX_ROBOTS = 6;
 export const CMD = { INPUTS: 0, GOAL: 1, IDLE: 2 };
 const PHASES = ['countdown', 'auto', 'gap', 'transition', 'shift1', 'shift2', 'shift3', 'shift4', 'endgame', 'settle', 'done'];
 const SCORE = ['autoFuel', 'teleFuel', 'inactiveFuel', 'towerAuto', 'towerTele', 'foulPoints', 'total'];
@@ -26,7 +26,7 @@ function intern(s) {
 function blockSize(count) { return (HEADER + ROBOT * MAX_ROBOTS) * 8 + count * 13 + ((8 - count * 13 % 8) % 8); }
 
 // Header f64[24]: slot, elapsed, clock, phase, firstInactive(-1 none, 0 blue, 1 red), blue active, red active,
-// robots, blue score[7], red score[7], ego, fuel count. Robot f64[24] each (unused rows are zero); FUEL f32 pos, u8 where.
+// robots, blue score[7], red score[7], ego, fuel count. Robot f64[25] each (last field: cumulative fouls); FUEL f32 pos, u8 where.
 function encode(match, view, out = Buffer.alloc(blockSize(view.fuel.count)), offset = 0) {
   const count = view.fuel.count;
   const f = new Float64Array(out.buffer, out.byteOffset + offset, HEADER + ROBOT * MAX_ROBOTS);
@@ -46,6 +46,7 @@ function encode(match, view, out = Buffer.alloc(blockSize(view.fuel.count)), off
     f[o + 17] = intern(r.state ?? null);
     f[o + 18] = robot.abandoned ? 1 : 0; f[o + 19] = robot.driver?.recovering ? 1 : 0;
     f[o + 20] = robot.driver?.recoveryStage ?? 0; f[o + 21] = fed.get(r.id) ?? 0; f[o + 22] = robot.kind; f[o + 23] = r.drumRpm ?? 0;
+    f[o + 24] = match.fouls.get(r.id) ?? 0;
   });
   const base = offset + (HEADER + ROBOT * MAX_ROBOTS) * 8;
   new Float32Array(out.buffer, out.byteOffset + base, count * 3).set(view.fuel.pos.subarray(0, count * 3));
@@ -57,6 +58,7 @@ class Match {
   constructor(engine, slot, request) {
     const { sim, config } = engine.create(request.config ?? {});
     this.slot = slot; this.sim = sim; this.config = config; this.freeplay = config.freeplay;
+    this.fouls = new Map();
     this.delay = request.delay ?? 0; this.hold = request.hold ?? 1; this.tick = 0;
     for (const [key, v, hi] of [['delay', this.delay, 600], ['hold', this.hold, 60]])
       if (!Number.isInteger(v) || v < (key === 'hold' ? 1 : 0) || v > hi) throw new Error(`${key} must be an integer tick count`);
@@ -97,8 +99,14 @@ class Match {
       }
       sim.step(inputs);
       this.tick++;
+      if (this.delay) this.drainFouls();
       if (this.delay) { this.ring.push(encode(this, sim.views())); this.ring.shift(); }
     }
+    if (!this.delay) this.drainFouls();
+  }
+  drainFouls() {
+    for (const event of this.sim.drainEvents()) if (event.t === 'foul')
+      this.fouls.set(event.by, (this.fouls.get(event.by) ?? 0) + 1);
   }
   observe(out, offset) {
     if (this.delay) { this.ring[0].copy(out, offset); return; }
