@@ -22,7 +22,7 @@ The RBRP FUEL header has a ball ID and where code, but no explicit owner field; 
 when available, and carried position resolves otherwise unknown IDs. A recorded `0/1 → 2` pickup labels intake,
 and `2 → 1` labels score for the previous owner. Each transfer marks a ±3 tick span, projected onto held control
 intervals; no transitions are inferred across capture gaps. These indicate observable transfers, not every press.
-Workers restore recorded linear velocity and estimate angular and ball velocity from adjacent frames. They search
+Workers estimate linear, angular and ball velocity from adjacent frames. They search
 drive and turn only. A trajectory starts from observed displacement and velocity, corrects against intermediate
 simulated poses during search, and is ranked against recorded pose, angle and velocity.
 The chosen inputs are then replayed from a fresh identical reset, with no corrections or intermediate resets.
@@ -55,10 +55,16 @@ The report includes overall and contact-excluded endpoint error. Geometry flags 
 field wall/hub overlap, and a speed stall in ground FUEL. The contact-excluded metric drops a segment if any
 robot has a flag. No detected contact is not proof of a search failure.
 
-PR #2 validation ran every eligible two-second segment across eight workers: 45 solo replays and 11
-passive multiplayer captures, yielding 4,322 segments and 321,180 robot/control examples. Planar
+Before switching to recorded button labels, PR #2 validation ran every eligible two-second segment across
+eight workers: 45 solo replays and 11 passive multiplayer captures, yielding 4,322 segments and
+321,180 robot/control examples. Planar
 endpoint median / p90 was 2.35 / 24.81 cm overall and 1.78 / 24.48 cm excluding contact-flagged
 segments. Exact hopper match was 43.6% at reset and 18.6% at the endpoint, below the 80% target.
+
+On those archive intervals, the recorded transitions label 114,541 intake and 142,548 score examples.
+Robot-tick agreement with the old searched controls is 71.20% for intake and 82.19% for score.
+On 300 paired reset-velocity endpoints, position-derived linear velocity reduced p90 pose error from
+57.50 cm with recorded linear velocity to 50.72 cm, with the same reconstructed angular velocity.
 
 ## 2. Goal labelling
 
