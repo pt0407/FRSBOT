@@ -1,0 +1,148 @@
+"""Run ImAI through a virtual gamepad in solo Singleplayer only."""
+import argparse
+import asyncio
+import json
+import logging
+import math
+import os
+import re
+import time
+from dataclasses import asdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+from frsbot.bot.imai import ImAI
+from frsbot.core.inputs import Inputs
+from frsbot.core.specs import load_specs
+from frsbot.core.state import Phase
+from frsbot.live.bindings import inputs_to_pad
+from frsbot.sim.wasm_env import view_to_state
+
+INJECT = Path(__file__).with_name("inject.js")
+ROOT = Path(__file__).resolve().parents[2]
+LOG = logging.getLogger(__name__)
+
+
+def state_summary(state):
+    return dict(t=state.t, phase=state.phase.value, me=state.me,
+                robots=[asdict(r) for r in state.robots],
+                hubs={k: dict(active=v.active, seconds_to_toggle=v.seconds_to_toggle if math.isfinite(v.seconds_to_toggle) else None)
+                      for k, v in state.hubs.items()},
+                fuel_count=len(state.fuel.where))
+
+
+async def start_solo(page, team, alliance):
+    await page.goto("https://rebuilt.frsim.com", wait_until="networkidle")
+    await page.wait_for_timeout(3500)
+    await page.locator("button").filter(has_text="Singleplayer").click()
+    await page.locator("button").filter(has_text=re.compile(r"^Change$")).click()
+    await page.locator("button").filter(has_text=re.compile(rf"^{team}(?=\D)")).first.click()
+    await page.locator("button").filter(has_text=re.compile(r"^Drive ")).click()
+    await page.locator("button").filter(has_text=re.compile(rf"^{alliance}$", re.I)).click()
+    await page.locator("button").filter(has_text="Start match").click()
+    await page.wait_for_function("window.__imai.create !== null")
+
+
+async def write_pad(page, inputs):
+    axes, buttons = inputs_to_pad(inputs)
+    await page.evaluate("pad => window.__imai.writePad(pad)", dict(axes=axes, buttons=buttons))
+
+
+async def drive(page, spec, alliance, output, run_id, timeout=300):
+    bot, seq, acts = ImAI(spec), 0, 0
+    started = time.monotonic()
+    baseline = None
+    last = None
+    with (output / f"{run_id}.jsonl").open("w") as stream:
+        def record(value):
+            stream.write(json.dumps(value, allow_nan=False, separators=(",", ":")) + "\n")
+
+        while time.monotonic() - started < timeout:
+            tick = time.monotonic()
+            packet = await page.evaluate("seq => window.__imai.poll(seq)", seq)
+            if packet["error"] or packet["fieldRelativeError"]:
+                raise RuntimeError(packet["error"] or "sent input is not fieldRelative; keep the default camera")
+            if baseline is None and packet["frames"]:
+                baseline = packet
+                record(dict(kind="match", wall_time=time.time(), create=packet["create"], ready=packet["ready"]))
+                config = packet["create"]
+                if config["team"] != spec.team or config["alliance"] != alliance or config["auto"] != "none":
+                    raise RuntimeError("solo setup does not match requested team/alliance/auto")
+            if packet["frames"]:
+                frame = packet["frames"][-1]
+                seq, last = frame["seq"], frame["view"]
+                state = view_to_state(last)
+                inputs = bot.act(state)
+                inputs.climb = False
+                if not inputs.field_relative:
+                    raise RuntimeError("ImAI requested robot-relative input; no fieldRelative pad binding")
+                await write_pad(page, inputs)
+                acts += 1
+                record(dict(kind="step", t=state.t, wall_time=time.time(), seq=seq,
+                            received=frame["received"], state=state_summary(state), inputs=asdict(inputs),
+                            blocked=packet["blocked"]))
+                if state.phase == Phase.DONE:
+                    break
+            await asyncio.sleep(max(0, 1 / 30 - (time.monotonic() - tick)))
+        else:
+            raise TimeoutError(f"solo match did not end within {timeout} seconds")
+        await write_pad(page, Inputs())
+        await page.locator("button").filter(has_text="Play again").wait_for(timeout=30000)
+        await page.wait_for_function("!Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('Counting'))", timeout=30000)
+        text = await page.locator("body").inner_text()
+        screenshot = output / f"{run_id}-end.png"
+        await page.screenshot(path=str(screenshot), full_page=True)
+        seconds = (packet["received"] - baseline["received"]) / 1000
+        result = dict(team=spec.team, alliance=alliance, seed=packet["create"]["seed"],
+                      start=packet["create"]["start"], final_score=last["score"], in_game_score_text=text,
+                      frames_per_second=(packet["frameCount"] - baseline["frameCount"]) / seconds,
+                      pad_polls_per_second=(packet["pollCount"] - baseline["pollCount"]) / seconds,
+                      input_sends_per_second=(packet["inputCount"] - baseline["inputCount"]) / seconds,
+                      bot_acts_per_second=acts / seconds, screenshot=str(screenshot))
+        record(dict(kind="summary", wall_time=time.time(), **result))
+        (output / f"{run_id}-summary.json").write_text(json.dumps(result, indent=2) + "\n")
+        return result
+
+
+async def run(args, spec):
+    from playwright.async_api import async_playwright
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    run_id = datetime.now(timezone.utc).strftime(f"imai-{spec.team}-{args.alliance}-%Y%m%dT%H%M%S%fZ")
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=not args.headed,
+            env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":0"),
+                 "XAUTHORITY": os.environ.get("XAUTHORITY", str(Path.home() / ".Xauthority"))},
+            args=["--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--no-sandbox"])
+        page = None
+        try:
+            page = await browser.new_page(viewport=dict(width=640, height=360), device_scale_factor=1)
+            await page.add_init_script(path=str(INJECT))
+            await start_solo(page, spec.team, args.alliance)
+            return await drive(page, spec, args.alliance, args.out, run_id)
+        finally:
+            if page is not None and not page.is_closed():
+                try:
+                    await page.evaluate("window.__imai?.zero()")
+                except Exception:
+                    LOG.exception("could not zero pad before closing browser")
+            await browser.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--team", type=int, required=True)
+    parser.add_argument("--alliance", choices=("blue", "red"), default="blue")
+    parser.add_argument("--mode", choices=("solo",), default="solo")
+    parser.add_argument("--headed", action="store_true")
+    parser.add_argument("--out", type=Path, default=ROOT / "data" / "live")
+    args = parser.parse_args()
+    specs = {s.team: s for s in load_specs()}
+    if args.team not in specs:
+        parser.error(f"unknown team {args.team}")
+    logging.basicConfig(level=logging.INFO)
+    print(json.dumps(asyncio.run(run(args, specs[args.team])), allow_nan=False), flush=True)
+
+
+if __name__ == "__main__":
+    main()
