@@ -10,5 +10,6 @@ DEFAULTS = dict(collect_frac=0.3, collect_min=10.0, replan_s=0.5, avoid_slot_m=1
                 stage_full_frac=0.95, arrive_margin_s=0.0, intake_needs_fuel=0,
                 score_full_frac=0.85,
                 learned_hint=0, hint_threshold=0.6,
-                cluster_bias=0.5)
+                cluster_bias=0.5,
+                collect_near_frac=0.6, collect_cos_floor=0.05)
 PARAMS = {**DEFAULTS, **json.loads(os.environ.get("IMAI_PARAMS", "{}"))}

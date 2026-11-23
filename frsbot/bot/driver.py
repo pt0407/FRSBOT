@@ -160,8 +160,8 @@ class Driver:
         speed = min(vmax, 2 * distance, math.sqrt(2 * self.spec.accel * .4 * max(0, distance - .12)))
         if goal.kind == "Collect":
             if distance < 1:
-                speed = min(speed, vmax * .6)
-            speed *= max(.05, math.cos(angle_error(direction, robot.a)))
+                speed = min(speed, vmax * PARAMS["collect_near_frac"])
+            speed *= max(PARAMS["collect_cos_floor"], math.cos(angle_error(direction, robot.a)))
         if arriving and final_waypoint:
             speed = 0
         elif arriving:
