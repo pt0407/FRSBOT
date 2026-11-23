@@ -101,7 +101,7 @@ class Planner:
         dx, dz = centres[:, 0] - robot.x, centres[:, 1] - robot.z
         travel = np.hypot(dx, dz) / self.spec.max_speed
         turn = np.abs((np.arctan2(dz, dx) - robot.a + np.pi) % (2 * np.pi) - np.pi) / self.spec.turn_rate
-        values = balls / (travel + turn + .5)
+        values = balls / (travel + turn + PARAMS["cluster_bias"])
         own = self.score_spot(state)
         if state.hubs[robot.alliance].active:
             values /= 1 + .08 * np.hypot(centres[:, 0] - own[0], centres[:, 1] - own[1])
