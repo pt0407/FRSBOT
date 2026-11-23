@@ -51,7 +51,9 @@ def test_js_decoder_and_safety():
     json.dumps(state_summary(state), allow_nan=False)
 
 
-@pytest.mark.parametrize("args", [("--mode", "ranked"), ("--mode", "online"), ("--team", "123456")])
+@pytest.mark.parametrize("args", [("--mode", "ranked"), ("--mode", "online"), ("--team", "123456"),
+                                  ("--latency", "nan"), ("--latency", "-1"), ("--calibrate", "-1"),
+                                  ("--driver", "online")])
 def test_cli_rejects_unsafe_or_unknown_setup(args):
     result = subprocess.run(["/usr/bin/python3", "-m", "frsbot.live.bridge", "--team", "254", *args],
                             cwd=ROOT, capture_output=True, text=True, timeout=15)

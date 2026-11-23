@@ -116,7 +116,10 @@
       try { api.driver(); } catch (error) { fail(error); }
     }
     const at = performance.now();
-    for (const trace of api.waitingPoll) { trace.pollAt = at; ring(api.waitingInput, trace, 1200); }
+    for (const trace of api.waitingPoll) {
+      trace.pollAt = at; trace.sampled = trace === api.waitingPoll.at(-1);
+      ring(api.waitingInput, trace, 1200);
+    }
     api.waitingPoll = [];
     return [pad, null, null, null];
   } });

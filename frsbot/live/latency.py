@@ -34,13 +34,14 @@ class Latency:
     @property
     def estimate(self):
         measured = [s["ms"] for s in self.steps if s.get("ms") is not None]
-        recent = self.traces[-120:]
+        recent = [t for t in self.traces if t.get("sampled", True)][-120:]
         transport = float(np.median([t["frameAt"] - t["at"] for t in recent])) if recent else 0
         estimate = float(np.median(measured)) + transport - (self.reference_ms or 0) if measured else transport
         return max(0, min(1, estimate / 1000))
 
     def summary(self):
-        stages = {name: distribution(t[end] - t[start] for t in self.traces)
+        sampled = [t for t in self.traces if t.get("sampled", True)]
+        stages = {name: distribution(t[end] - t[start] for t in sampled)
                   for name, start, end in [("write_to_poll", "at", "pollAt"),
                                             ("poll_to_input", "pollAt", "inputAt"),
                                             ("input_to_frame", "inputAt", "frameAt"),
@@ -51,6 +52,7 @@ class Latency:
                      effect_tick_p90=float(np.percentile(ticks, 90)) if ticks else None,
                      attempts=self.steps)
         return dict(step_response=steps, transport=stages, estimate_ms=self.estimate * 1000,
+                    writes=len(self.traces), sampled_writes=len(sampled),
                     frame_stage="first frame received after input send; not proof of physical effect")
 
 

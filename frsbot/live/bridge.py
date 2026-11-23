@@ -16,7 +16,9 @@ from frsbot.core.inputs import Inputs
 from frsbot.core.specs import load_specs
 from frsbot.core.state import Phase
 from frsbot.live.bindings import inputs_to_pad
-from frsbot.sim.wasm_env import view_to_state
+from frsbot.live.latency import Latency, calibrate, latency_arg
+from frsbot.live.page_driver import PagePlanner, install
+from frsbot.live.predict import Observations, predict
 
 INJECT = Path(__file__).with_name("inject.js")
 ROOT = Path(__file__).resolve().parents[2]
@@ -54,45 +56,79 @@ async def write_pad(page, inputs):
     await page.evaluate("pad => window.__imai.writePad(pad)", dict(axes=axes, buttons=buttons))
 
 
-async def drive(page, spec, alliance, output, run_id, timeout=300):
+async def drive(page, spec, alliance, output, run_id, timeout=300, driver="python", latency_mode="auto", calibration=6):
     bot, seq, acts = ImAI(spec), 0, 0
+    timing, observations = Latency(), Observations()
+    last_inputs = Inputs(field_relative=True)
+    planner = PagePlanner(spec) if driver == "page" else None
+    planning, next_plan, plans = None, 0, 0
     started = time.monotonic()
-    baseline = None
+    baseline = await page.evaluate("window.__imai.poll()")
+    horizon = lambda: timing.estimate if latency_mode == "auto" else latency_mode / 1000
     last = None
     with (output / f"{run_id}.jsonl").open("w") as stream:
         def record(value):
             stream.write(json.dumps(value, allow_nan=False, separators=(",", ":")) + "\n")
 
+        config = baseline["create"]
+        if config["team"] != spec.team or config["alliance"] != alliance or config["auto"] != "none":
+            raise RuntimeError("solo setup does not match requested team/alliance/auto")
+        record(dict(kind="match", wall_time=time.time(), create=config, ready=baseline["ready"], driver=driver))
+        if calibration:
+            samples = await calibrate(page, calibration, timing)
+            record(dict(kind="calibration", samples=samples))
+        if planner:
+            await install(page, spec, horizon())
         while time.monotonic() - started < timeout:
             tick = time.monotonic()
-            packet = await page.evaluate("seq => window.__imai.poll(seq)", seq)
+            packet = await page.evaluate("([seq, latencySince]) => window.__imai.poll(seq, {latencySince})", [seq, timing.since])
+            previous_trace = timing.since
+            timing.ingest(packet)
+            if timing.since != previous_trace:
+                record(dict(kind="latency", traces=packet["latencies"]))
             if packet["error"] or packet["fieldRelativeError"]:
                 raise RuntimeError(packet["error"] or "sent input is not fieldRelative; keep the default camera")
-            if baseline is None and packet["frames"]:
-                baseline = packet
-                record(dict(kind="match", wall_time=time.time(), create=packet["create"], ready=packet["ready"]))
-                config = packet["create"]
-                if config["team"] != spec.team or config["alliance"] != alliance or config["auto"] != "none":
-                    raise RuntimeError("solo setup does not match requested team/alliance/auto")
+            if planning is not None and planning.done():
+                goal = planning.result()
+                planning = None
+                plans += 1
+                await page.evaluate("payload => window.__imai.setGoal(payload)", dict(goal=goal, horizon=horizon()))
             if packet["frames"]:
                 frame = packet["frames"][-1]
                 seq, last = frame["seq"], frame["view"]
-                state = view_to_state(last)
-                inputs = bot.act(state)
-                inputs.climb = False
-                if not inputs.field_relative:
-                    raise RuntimeError("ImAI requested robot-relative input; no fieldRelative pad binding")
-                await write_pad(page, inputs)
-                acts += 1
+                state = observations.state(last)
+                L = horizon()
+                status = packet["driverStatus"]
+                if planner and status:
+                    raw = status["inputs"].copy()
+                    raw["field_relative"] = raw.pop("fieldRelative")
+                    last_inputs = Inputs(**raw)
+                predicted = predict(state, last_inputs, L, spec)
+                if planner:
+                    if planning is None and tick >= next_plan and state.phase != Phase.DONE:
+                        planning = asyncio.create_task(asyncio.to_thread(planner.plan, predicted, status))
+                        next_plan = tick + .25
+                    inputs = last_inputs
+                else:
+                    inputs = bot.act(predicted)
+                    inputs.climb = False
+                    if not inputs.field_relative:
+                        raise RuntimeError("ImAI requested robot-relative input; no fieldRelative pad binding")
+                    await write_pad(page, inputs)
+                    last_inputs = inputs
+                    acts += 1
                 record(dict(kind="step", t=state.t, wall_time=time.time(), seq=seq,
                             received=frame["received"], state=state_summary(state), inputs=asdict(inputs),
-                            blocked=packet["blocked"], sent_input=packet["input"]))
+                            predicted_t=predicted.t, latency_ms=L * 1000,
+                            blocked=packet["blocked"], sent_input=packet["input"], driver_status=status))
                 if state.phase == Phase.DONE:
                     break
             await asyncio.sleep(max(0, 1 / 30 - (time.monotonic() - tick)))
         else:
             raise TimeoutError(f"solo match did not end within {timeout} seconds")
-        await write_pad(page, Inputs())
+        if planning is not None:
+            await planning
+        await page.evaluate("() => { window.__imai.driver = null; window.__imai.zero(); }")
         await page.locator("button").filter(has_text="Play again").wait_for(timeout=30000)
         await page.wait_for_function("!Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('Counting'))", timeout=30000)
         await page.set_viewport_size(dict(width=1280, height=720))
@@ -101,11 +137,13 @@ async def drive(page, spec, alliance, output, run_id, timeout=300):
         await page.screenshot(path=str(screenshot), full_page=True)
         seconds = (packet["received"] - baseline["received"]) / 1000
         result = dict(team=spec.team, alliance=alliance, seed=packet["create"]["seed"],
+                      driver=driver, latency_mode=latency_mode, latency=timing.summary(),
                       start=packet["create"]["start"], final_score=last["score"], in_game_score_text=text,
                       frames_per_second=(packet["frameCount"] - baseline["frameCount"]) / seconds,
                       pad_polls_per_second=(packet["pollCount"] - baseline["pollCount"]) / seconds,
                       input_sends_per_second=(packet["inputCount"] - baseline["inputCount"]) / seconds,
-                      bot_acts_per_second=acts / seconds, screenshot=str(screenshot))
+                      bot_acts_per_second=(packet["driverCount"] if planner else acts) / seconds,
+                      planner_per_second=plans / seconds if planner else None, screenshot=str(screenshot))
         record(dict(kind="summary", wall_time=time.time(), **result))
         (output / f"{run_id}-summary.json").write_text(json.dumps(result, indent=2) + "\n")
         return result
@@ -128,11 +166,12 @@ async def run(args, spec):
             await page.add_init_script(script=f"({GRAPHICS})()")
             await start_solo(page, spec.team, args.alliance)
             await page.set_viewport_size(dict(width=320, height=180))
-            return await drive(page, spec, args.alliance, args.out, run_id)
+            return await drive(page, spec, args.alliance, args.out, run_id,
+                               driver=args.driver, latency_mode=args.latency, calibration=args.calibrate)
         finally:
             if page is not None and not page.is_closed():
                 try:
-                    await page.evaluate("window.__imai?.zero()")
+                    await page.evaluate("() => { if (window.__imai) { window.__imai.driver = null; window.__imai.zero(); } }")
                 except Exception:
                     LOG.exception("could not zero pad before closing browser")
             await browser.close()
@@ -144,8 +183,13 @@ def main():
     parser.add_argument("--alliance", choices=("blue", "red"), default="blue")
     parser.add_argument("--mode", choices=("solo",), default="solo")
     parser.add_argument("--headed", action="store_true")
+    parser.add_argument("--driver", choices=("python", "page"), default="python")
+    parser.add_argument("--calibrate", type=int, default=6, metavar="N")
+    parser.add_argument("--latency", type=latency_arg, default="auto", metavar="auto|MS")
     parser.add_argument("--out", type=Path, default=ROOT / "data" / "live")
     args = parser.parse_args()
+    if not 0 <= args.calibrate <= 12:
+        parser.error("--calibrate must be 0..12")
     specs = {s.team: s for s in load_specs()}
     if args.team not in specs:
         parser.error(f"unknown team {args.team}")

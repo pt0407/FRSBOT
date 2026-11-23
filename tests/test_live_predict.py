@@ -63,6 +63,14 @@ def test_empty_state_and_observation_history():
     assert predict(empty, Inputs(), .1, SPEC).fuel.pos.shape == (0, 3)
 
 
+def test_gap_to_transition_before_auto_winner_is_published():
+    state = sample()
+    state.t, state.phase, state._first_inactive = 22.95, Phase.GAP, None
+    result = predict(state, Inputs(), .1, SPEC)
+    assert result.phase == Phase.TRANSITION
+    assert all(h.active and h.seconds_to_toggle == pytest.approx(9.95) for h in result.hubs.values())
+
+
 @pytest.mark.parametrize('L', [.05, .1, .15])
 @pytest.mark.parametrize('command', [Inputs(y=1, field_relative=True), Inputs(x=.5, y=.5, field_relative=True), Inputs(turn=.5, field_relative=True)])
 def test_ego_prediction_against_held_wasm_rollout(L, command):

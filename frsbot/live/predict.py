@@ -46,8 +46,15 @@ def predict(state, last_inputs, L, spec):
     if first is None and state.phase in (Phase.SHIFT1, Phase.SHIFT2, Phase.SHIFT3, Phase.SHIFT4):
         off = next(a for a, h in state.hubs.items() if not h.active)
         first = off if state.phase in (Phase.SHIFT1, Phase.SHIFT3) else ("red" if off == "blue" else "blue")
-    result.hubs = {a: HubState(is_active(a, result.t, first), seconds_to_toggle(a, result.t, first))
-                   for a in state.hubs}
+    result.hubs = {}
+    for a in state.hubs:
+        active = is_active(a, result.t, first)
+        if first is None and 23 <= result.t < 33:
+            # Auto's winner is not published until gap ends; 33 is the next possible toggle.
+            toggle = 33 - result.t
+        else:
+            toggle = seconds_to_toggle(a, result.t, first)
+        result.hubs[a] = HubState(active, toggle)
     for i, robot in enumerate(result.robots):
         if i != state.me:
             robot.x += robot.vx * min(L, .3)
