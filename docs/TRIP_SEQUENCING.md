@@ -99,3 +99,9 @@ screens: team 4414 0.8 m gave 633.3 and 1.5 m gave 654.7 (baseline 649.5). Team 
 
 Full protocol on teams 2910 and 4414 (both alliances, seeds 1-3): moving score on gave 516.8 (2910) and
 649.5 (4414); off gave 516.8 and 651.3. No meaningful difference, so the default stays as shipped.
+
+## Acceptance gate run (full 30-case protocol)
+
+`trip_sequencing=1, trip_shift_aware=1, trip_fill=1.0`: mean 545.2 vs baseline 530.2 (+15.0).
+Per team: 254 629.2 (+28.7), 2910 513.3 (-3.5), 1114 616.5 (+5.3), 4414 667.8 (+18.3), 60026 299.3 (+26.5).
+No team fell more than 20 points, but the mean gain misses the +40 gate. Not promoted; flag stays off.
