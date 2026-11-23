@@ -160,7 +160,7 @@ class Planner:
         if hub.active and robot.hopper and (hub.seconds_to_toggle <= score_time + 1 or
                 robot.hopper >= .85 * self.capacity(state) or not clusters or clusters[0][0] < 2):
             goal = Goal("Score", spot)
-        elif not hub.active and robot.hopper and (robot.hopper >= .95 * self.capacity(state) or hub.seconds_to_toggle < score_time):
+        elif not hub.active and robot.hopper and (robot.hopper >= PARAMS["stage_full_frac"] * self.capacity(state) or hub.seconds_to_toggle < score_time + PARAMS["arrive_margin_s"]):
             goal = Goal("Stage", spot)
         elif clusters:
             goal = Goal("Collect", clusters[0][1])
