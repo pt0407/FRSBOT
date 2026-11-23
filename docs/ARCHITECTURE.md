@@ -58,8 +58,33 @@ from frsbot.sim.wasm_env import WasmEnv
 with WasmEnv() as env:
     state = env.reset(2910, alliance="blue", start={"fx": 0, "fy": 0, "headingDeg": 0}, seed=1)
     state = env.step(Inputs(y=1, field_relative=True), ticks=60)
-    full_view = env.view  # score, gates, all FUEL arrays, hubs, drivers, etc.
+    full_view = env.view  # score breakdowns, gates, FUEL arrays, hubs, raw robot pose/quat/vel
 ```
+
+`WasmEnv` talks to `frsbot/sim/engine/vec_server.mjs` over a length-prefixed binary protocol (`frsbot/sim/ipc.py`;
+fixed f64 header and robot rows plus raw f32 FUEL positions and u8 `where`). Multi-robot matches (1-6 robots):
+
+```python
+from frsbot.sim.policies import GoalImAIPolicy, ReplayPolicy
+from frsbot.sim.vec_env import RobotSlot, VecWasmEnv
+
+state = env.reset(robots=[RobotSlot(254, "blue"), RobotSlot(2910, "red", policy=GoalImAIPolicy(spec_2910))], ego=0, seed=1)
+result = env.step({0: Inputs(y=1)}, ticks=6)  # StepResult: views {i: GameState}, scores, breakdowns, done
+with VecWasmEnv(n_workers=8, matches_per_worker=4) as vec:  # one Node worker per core, k matches each
+    vec.reset([dict(robots=[...], seed=s) for s in range(32)])
+    results = vec.step([{0: action} for action in batched_actions], ticks=6)
+```
+
+An action is `Inputs`, a planner `Goal` (the JS port of the driver, `frsbot/sim/engine/driver.mjs`, drives it
+every tick inside the engine process) or `None` (idle). Robots without an action use their `RobotSlot.policy`:
+`ImAIPolicy` (Python reference), `GoalImAIPolicy` (Python planner + JS driver), `ReplayPolicy` (a telemetry
+recording) or idle. Each worker runs in its own Python process so slot policies run next to their engine.
+Every robot's view is the full shared field (the live client hides nothing either); only `me` differs.
+`WasmEnv(latency=(lo, hi))` / `VecWasmEnv(latency=...)` draw an observation delay of U(lo, hi) seconds and an
+input hold of 1-3 ticks per episode, seeded by the match seed (docs/LIVE.md §2). The delay applies to the whole
+observation (slot policies see it too). `python3 -m frsbot.tools.driver_parity` checks the JS driver against
+`frsbot/bot/driver.py`; keep them in sync. `python3 -m frsbot.replay.cache` decodes `data/raw/*.rbrp` on every
+core into memory-mappable `data/cache/*.npz` (`cache.load`, `cache.states`).
 
 Reset accepts `auto="none"`, `event="event"`, `hp=True`, `unload=True`, `freeplay=False`, and `countdown=False`.
 Start uses the game's field fx/fy coordinates (the game may clamp the requested pose); observations use replay
@@ -68,14 +93,16 @@ including negative countdown time. Freeplay preserves the engine's phase and has
 Every step advances exactly `ticks` 1/60-second ticks, holding the input constant, and returns the last state.
 `RobotState.capacity` is the engine view's `hopperCapacity`; it is not the UI's hopper-plus-feed capacity.
 
-`frsbot/sim/engine/server.mjs [data/engine]` also accepts one JSON object per line: `new` with a `config` object,
-`start` (optional `countdown`), `step` (`inputs` keyed by robot id, `n` ticks), `state`, and `close`.
+`JsonWasmEnv` keeps the original one-robot JSON backend: `frsbot/sim/engine/server.mjs [data/engine]` accepts one JSON object per line: `new` with a `config` object,
+`start` (optional `countdown`), `step` (`inputs` or `goals` keyed by robot id, `n` ticks), `state`, and `close`.
+`new` may carry `drivers` (`{id: {spec, profile}}`) so `step` goals run the JS driver every tick.
 Each response is `{ok:true, view, engine, build}` (close omits view), or `{ok:false, error}`. Typed arrays are
 serialized as ordinary flat JSON arrays. Diagnostics go to stderr; after fetching, simulation makes no network calls.
 Use a context manager or `close()` to release the child process.
 
-Checks: `python3 -m pytest -q tests/test_engine_fetch.py tests/test_wasm_env.py` (engine tests skip without
-downloaded assets); traces/throughput: `python3 -m frsbot.tools.benchmark_engine`.
+Checks: `python3 -m pytest -q tests/test_engine_fetch.py tests/test_wasm_env.py tests/test_vec_env.py
+tests/test_driver_parity.py tests/test_replay_cache.py` (engine tests skip without downloaded assets);
+traces/throughput: `python3 -m frsbot.tools.benchmark_engine [--step all --workers 8]`.
 
 ## Core types
 

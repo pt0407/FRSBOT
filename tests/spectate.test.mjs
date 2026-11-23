@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { capture, fetchReplay } from '../frsbot/scrape/spectate.mjs';
+import { batch, capture, fetchReplay } from '../frsbot/scrape/spectate.mjs';
 
 function server(matches) {
   return class {
     static sent = [];
-    constructor() { queueMicrotask(() => this.onopen()); }
-    close() { queueMicrotask(() => this.onclose()); }
+    constructor() { this.readyState = 1; queueMicrotask(() => this.onopen()); }
+    close() { this.readyState = 3; queueMicrotask(() => this.onclose()); }
     emit(data) { queueMicrotask(() => this.onmessage({ data: JSON.stringify(data) })); }
     send(raw) {
       const message = JSON.parse(raw);
@@ -61,4 +61,73 @@ test('public replay GET saves RBRP and rejects non-replays', async t => {
   assert.equal(readFileSync(target).subarray(0, 4).toString(), 'RBRP');
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, arrayBuffer: async () => Buffer.from('<html>') }));
   await assert.rejects(fetchReplay('badbody', output), /neither RBRP nor gzip/);
+});
+
+test('batch takes successive mixed modes once, never more than two watches', async () => {
+  const matches = ['1v1', '2v2', '3v3', '1v1'].map((mode, i) => ({ code: `ABC${i}`, mode, since: i, game: 1 }));
+  const Socket = server(matches);
+  const output = mkdtempSync(path.join(os.tmpdir(), 'batch-test-'));
+  let active = 0, peak = 0;
+  const watched = [], decoded = [];
+  const watch = options => new Promise(resolve => {
+    watched.push(options.code);
+    assert(options.signal);
+    peak = Math.max(peak, ++active);
+    setTimeout(() => { active--; resolve({ capture: options.code, frames: 1 }); }, 10);
+  });
+  const result = await batch({ output, minutes: .002, Socket, watch, pollMs: 10, decode: async f => decoded.push(f) });
+  assert.equal(result.results.length, 4);
+  assert.equal(new Set(watched).size, 4);
+  assert.equal(decoded.length, 4);
+  assert.equal(peak, 2);
+  assert(Socket.sent.every(m => m.t === 'rankedLive'));
+  assert.throws(() => batch({ minutes: 1, concurrency: 5 }), /concurrency/);
+  assert.throws(() => batch({ minutes: 0 }), /minutes/);
+});
+
+test('batch deadline aborts active watches and empty lists terminate cleanly', async () => {
+  const output = mkdtempSync(path.join(os.tmpdir(), 'batch-test-'));
+  let aborted = 0;
+  const result = await batch({ output, minutes: .001, Socket: server([{ code: 'ABC1', since: 1 }]),
+    watch: o => new Promise(resolve => o.signal.addEventListener('abort', () => { aborted++; resolve({ frames: 0 }); })) });
+  assert.equal(aborted, 1);
+  assert.equal(result.results.length, 1);
+  const empty = await batch({ output, minutes: .001, Socket: server([]) });
+  assert.equal(empty.results.length, 0);
+});
+
+test('batch stops on listing error without retrying', async () => {
+  class Broken {
+    constructor() { queueMicrotask(() => this.onerror()); }
+    close() {}
+  }
+  await assert.rejects(batch({ output: mkdtempSync(path.join(os.tmpdir(), 'batch-test-')), minutes: 1, Socket: Broken }), /not retrying/);
+});
+
+test('four-watch mode honors persistent dedupe and external shutdown', async () => {
+  const output = mkdtempSync(path.join(os.tmpdir(), 'batch-four-'));
+  const matches = Array.from({ length: 6 }, (_, i) => ({ code: `ABC${i}`, since: i, game: 1 }));
+  let active = 0, peak = 0;
+  const result = await batch({ output, minutes: .002, concurrency: 4, Socket: server(matches),
+    seenKeys: ['ABC0:0:1'], pollMs: 10,
+    watch: o => new Promise(resolve => {
+      assert.equal(o.context.match_key, `${o.code}:${o.context.since}:1`);
+      peak = Math.max(peak, ++active);
+      setTimeout(() => { active--; resolve({ frames: 0 }); }, 10);
+    }) });
+  assert.equal(peak, 4);
+  assert.equal(result.results.length, 5);
+  const controller = new AbortController();
+  controller.abort();
+  const stopped = await batch({ output, minutes: 10, Socket: server(matches), signal: controller.signal });
+  assert.equal(stopped.results.length, 0);
+});
+
+test('failed watch still queues captured frames for compact recovery', async () => {
+  let decoded = false;
+  await assert.rejects(batch({ output: mkdtempSync(path.join(os.tmpdir(), 'batch-error-')), minutes: 1,
+    Socket: server([{ code: 'ABC1', since: 1, game: 1 }]),
+    watch: async () => { throw Object.assign(new Error('disconnect'), { captureResult: { capture: 'partial', frames: 1 } }); },
+    decode: async target => { assert.equal(target, 'partial'); decoded = true; } }), /disconnect/);
+  assert(decoded);
 });

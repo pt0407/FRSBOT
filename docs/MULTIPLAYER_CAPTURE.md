@@ -1,8 +1,88 @@
-# Passive multiplayer capture: first milestone
+# Passive REBUILT multiplayer capture
 
 The public ranked spectator path works without signing in. No room join, queue, robot input,
 or match-control request is sent. The recorder permits only `rankedLive` and `rankedWatch`.
-It watches one match at a time; fresh-match discovery requests the list at most once every 5 s.
+Single mode watches one match at a time; fresh-match discovery requests the list at most once every 5 s.
+
+## Continuous local recorder and GitHub submission
+
+From the repository root, with `FRSBOT_GITHUB_TOKEN` already exported (a token with repository
+contents/release write access to `pt0407/FRSBOT`), the single launch command is:
+
+```sh
+python3 -m frsbot.scrape.record_forever
+```
+
+This runs four passive ranked watches across 1v1/2v2/3v3 on the REBUILT endpoint only.
+It finds Node on PATH or under `~/.nvm`, needs the project's Python dependencies, and runs locally,
+not in GitHub Actions. Leave it in a persistent terminal or your process supervisor.
+Listing polls are five seconds apart. Disconnected watches are saved as partial matches and their
+slots reused. A listing disconnect, watch error or Node crash restarts the worker with exponential
+backoff (5–300 s); healthy workers rotate every 5.5 h. Only one recorder can own an output directory.
+
+Each finished match prints one `MATCH ...` status line. The recorder copies original wire frames
+to one gzip-compressed RBRP file under `data/raw_mp/matches/`, validates the FUEL stream, writes an
+upload outbox entry and fsyncs a local `manifest.jsonl` before removing its raw JSONL. The manifest
+contains id, mode, team numbers, robot IDs/alliances, last observed score, partial flag and frame count,
+plus asset/hash/release metadata. Match identity is a hash of the server's room code, room birth time
+and game number, so restarts do not duplicate already saved matches. The first saved capture wins;
+a partial match is not rewatched to manufacture a complete one. Older captures without server
+identity fields use their capture timestamp as a fallback.
+
+Interrupted raw files are recovered on startup/worker exit; an incomplete final JSON line is trimmed.
+Undecodable captures are retained in `failed/` for inspection, not silently deleted. Ctrl-C/SIGTERM
+stops discovery and active watches, finishes local conversion, and leaves any pending uploads on
+disk. Compact files are retained even after upload. If stopping forces worker termination after
+a five-minute grace period, its raw captures are recovered as well.
+
+The upload worker reads **only `FRSBOT_GITHUB_TOKEN`**, creates daily UTC releases tagged
+`mp-data-YYYYMMDD` if absent, uploads one `.rbrp.gz` asset per match and replaces that release's
+`manifest.jsonl` asset. A durable `upload_queue/` holds unacknowledged entries, with retry backoff;
+requests are at least one second apart. A local `upload_manifests/` cache allows interrupted manifest
+replacement to recover without losing earlier entries. There is one uploader per local directory;
+do not point independent machines at the same release concurrently (GitHub asset replacement has
+no compare-and-swap). Release limits/API errors leave matches queued instead of dropping them.
+Without a token, capture continues offline and warns once; restart with the token to drain the queue.
+All runtime files remain under gitignored `data/raw_mp/` (or `--output DIR`).
+
+Download **all `mp-data` / `mp-data-*` releases** into per-release directories, with SHA256 and frame
+count validation and resumable local reuse:
+
+```sh
+python3 -m frsbot.scrape.fetch_mp
+```
+
+The same token variable is optional for public downloads. Load either local or downloaded files
+directly as multi-robot `GameState` sequences:
+
+```python
+from frsbot.scrape.record_forever import load_match
+states = load_match("data/raw_mp/matches/ranked-EXAMPLE.rbrp.gz")
+```
+
+For a short live smoke test (stops cleanly via the same SIGINT shutdown path):
+
+```sh
+python3 -m frsbot.scrape.record_forever --smoke-seconds 5 --output data/raw_mp/forever-smoke
+```
+
+The real upload verifier needs a queued compact match and `FRSBOT_GITHUB_TOKEN` exported from the
+personal `GITHUB_TOKENCLASSIC` secret. It uploads/downloads the asset, verifies its hash and manifest,
+then deletes the throwaway `mp-data-test` release and tag. It refuses to overwrite an existing test
+release and keeps the real daily-release queue entry:
+
+```sh
+FRSBOT_GITHUB_TOKEN="$GITHUB_TOKENCLASSIC" python3 -m frsbot.scrape.mp_release --test-upload data/raw_mp/forever-smoke
+```
+
+For successive captures with at most two watches, use:
+
+```sh
+~/.nvm/versions/node/v24.22.2/bin/node frsbot/scrape/spectate.mjs --minutes 60 --concurrency 2 --decode --output data/raw_mp/batch
+```
+
+This includes 1v1/2v2/3v3 by default; `--mode` restricts the mode. See
+[MATCH_ANALYSIS.md](MATCH_ANALYSIS.md) for deadline behavior, manifests, methodology and FJ5S findings.
 
 ## Record and decode
 
@@ -26,7 +106,7 @@ python3 -m frsbot.replay.spectator data/raw_mp/CAPTURE.jsonl
 ```
 
 `--mode` also accepts 1v1/3v3. Without it, the recorder prefers 3v3, then 2v2, then 1v1.
-There is a 128 MiB received-binary cap and an explicit time cap. There are no automatic reconnects
+There is a 128 MiB received-binary cap and an explicit time cap. In these bounded commands there are no automatic reconnects
 or archive-download retries; HTTP errors and server errors are surfaced.
 
 ## Protocol and fidelity
@@ -92,6 +172,7 @@ Checks after the final code changes:
 366 passed in 13.02s
 ```
 
-No role/defense analysis or training has been implemented at this milestone. Since ranked names
+Role/defense analysis is now available; see [MATCH_ANALYSIS.md](MATCH_ANALYSIS.md). No training
+has been implemented. Since ranked names
 are anonymized, account-level identity exclusions cannot be guaranteed from these captures alone;
 do not promote them to identity-filtered training data without a provenance policy.
