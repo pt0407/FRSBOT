@@ -424,6 +424,9 @@ export class Driver {
     if (shooting && state.hubs[robot.alliance].active && state.hubs[robot.alliance].secondsToToggle <= planner.scoreTime(state) + 1)
       intake = false;
     if (shooting && this.recovering) intake = false;
+    // Engine-enforced speed gate (scoreSpeedTol): pressing score early only
+    // buys aim-translation slowdown, so approachFire skips those robots.
+    const speedGated = spec.brain_equivalents?.scoreSpeedTol != null;
     let score;
     if (PARAMS.freeFire) {
       score = active && robot.hopper > 0 && ownSide && low <= distanceHub && distanceHub <= high && v <= PARAMS.freeFireSpeed;
@@ -431,9 +434,9 @@ export class Driver {
     } else {
       score = shooting && inZone && atSpot && low <= distanceHub && distanceHub <= high && v <= scoreSpeed;
       score = score || (movingShot && v <= Math.min(scoreSpeed, spec.max_shot_speed * .6));
-      // Press score for the last ~1.5 s of approach: spin-up latches on the
-      // command without paying aim-translation slowdown for the whole leg.
-      if (PARAMS.approachFire && shooting && inZone && low <= distanceHub && distanceHub <= high)
+      // Press score near the end of approach: spin-up latches on the command
+      // without paying aim-translation slowdown for the whole leg.
+      if (PARAMS.approachFire && !speedGated && shooting && inZone && low <= distanceHub && distanceHub <= high)
         score = score || distance < 1.6 || v <= scoreSpeed;
       if (patrolFiring) score = v <= Math.min(scoreSpeed, PARAMS.patrolFireSpeed);
     }
@@ -454,7 +457,7 @@ export class Driver {
     // turret robots during Collect, where the chassis keeps steering the intake.
     const steersFree = spec.turret && goal.kind === 'Collect';
     if (score && !this.recovering && goal.kind !== 'ZoneMow' && !steersFree) turn = 0;
-    if (PARAMS.approachFire && shooting && ownSide && low <= distanceHub && distanceHub <= high && v <= scoreSpeed) turn = 0;
+    if (PARAMS.approachFire && !speedGated && shooting && ownSide && low <= distanceHub && distanceHub <= high && v <= scoreSpeed) turn = 0;
     if (patrolFiring) turn = 0;
     if (shooting && this.recoveryStage === 1 && state.t < this.reaimUntil) { x = y = 0; score = false; }
     if (shooting && state.t < this.wiggleUntil) {

@@ -342,16 +342,19 @@ class Driver:
             intake = False
         if shooting and self.recovering:
             intake = False
+        # Engine-enforced speed gate (scoreSpeedTol): pressing score early only
+        # buys aim-translation slowdown, so approach_fire skips those robots.
+        speed_gated = self.spec.brain_equivalents.get("scoreSpeedTol") is not None
         if PARAMS["free_fire"]:
             score = active and robot.hopper > 0 and own_side and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= PARAMS["free_fire_speed"]
             intake = robot.hopper < self.planner.capacity(state)
         else:
             score = shooting and in_zone and at_spot and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= score_speed
             score = score or moving_shot and math.hypot(robot.vx, robot.vz) <= min(score_speed, self.spec.max_shot_speed * .6)
-            # Press score for the last ~1.5 s of approach: hood/flywheel/tag
-            # spin-up latches on the command and is ready on arrival without
-            # paying the aim-translation slowdown for the whole leg.
-            if PARAMS["approach_fire"] and shooting and in_zone and low <= distance_hub <= high:
+            # Press score near the end of approach: hood/flywheel/tag spin-up
+            # latches on the command and is ready on arrival without paying
+            # the aim-translation slowdown for the whole leg.
+            if PARAMS["approach_fire"] and not speed_gated and shooting and in_zone and low <= distance_hub <= high:
                 score = score or distance < 1.6 or math.hypot(robot.vx, robot.vz) <= score_speed
             if patrol_firing:
                 score = math.hypot(robot.vx, robot.vz) <= min(score_speed, PARAMS["patrol_fire_speed"])
@@ -375,7 +378,7 @@ class Driver:
         steers_free = self.spec.turret and goal.kind == "Collect"
         if score and not self.recovering and goal.kind != "ZoneMow" and not steers_free:
             turn = 0
-        if PARAMS["approach_fire"] and shooting and own_side and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= score_speed:
+        if PARAMS["approach_fire"] and not speed_gated and shooting and own_side and low <= distance_hub <= high and math.hypot(robot.vx, robot.vz) <= score_speed:
             turn = 0
         if patrol_firing:
             turn = 0
