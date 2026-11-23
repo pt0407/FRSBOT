@@ -11,7 +11,7 @@ from frsbot.core.inputs import Inputs
 from frsbot.core.specs import load_specs
 from frsbot.core.state import FuelState, GameState, HubState, RobotState
 from frsbot.sim.engine.fetch import ENGINE_DIR
-from frsbot.sim.multi_env import MultiWasmEnv
+from frsbot.sim.multi_env import MultiWasmEnv, RobotSlot
 from frsbot.strategy import fouls
 from frsbot.strategy.bot import NEW_GOAL_KINDS, StrategicImAI
 from frsbot.strategy.driver import LANE_BOXES, StrategicDriver, half_diagonal, inside
@@ -206,19 +206,19 @@ engine = pytest.mark.skipif(not (ENGINE_DIR / "manifest.json").is_file(), reason
 @pytest.mark.parametrize("team", [254, 2910])
 def test_native_pass_lands_in_own_zone(team, capsys):
     with MultiWasmEnv() as env:
-        states = env.reset([dict(team=team, alliance="blue", start=dict(fx=2, fy=1.8, headingDeg=0))],
+        s = env.reset([RobotSlot(team=team, alliance="blue", start=dict(fx=2, fy=1.8, headingDeg=0))],
                            seed=7, hp=False, unload=False)
-        carried = np.flatnonzero(states[0].fuel.where == 2)
+        carried = np.flatnonzero(s.fuel.where == 2)
         assert len(carried) == 8
         for _ in range(300):
-            if states[0].robots[0].x > -2.:
+            if s.robots[0].x > -2.:
                 break
-            states = env.step({0: Inputs(y=.7, field_relative=True)}, 3)
-        states = env.step({}, 60)
-        assert -4.2418 < states[0].robots[0].x < 0
+            s = env.step({0: Inputs(y=.7, field_relative=True)}, 3).views[0]
+        s = env.step({}, 60).views[0]
+        assert -4.2418 < s.robots[0].x < 0
         for _ in range(180):
-            states = env.step({0: Inputs(score=True, field_relative=True)}, 3)
-        s = env.step({}, 300)[0]
+            env.step({0: Inputs(score=True, field_relative=True)}, 3)
+        s = env.step({}, 300).views[0]
         landed = sum(s.fuel.where[i] == 0 and s.fuel.pos[i, 0] < -4.2418 for i in carried)
         with capsys.disabled():
             print(f"\nNative pass team={team}: released={sum(s.fuel.where[i] != 2 for i in carried)}/8 landed_own_zone={landed}/8")
@@ -230,9 +230,9 @@ def test_defender_engine_smoke(specs, capsys):
     results = []
     for defended in (False, True):
         with MultiWasmEnv() as env:
-            states = env.reset([dict(team=254, alliance="blue", start=dict(fx=1.5, fy=2, headingDeg=0)),
-                                dict(team=2910, alliance="red", start=dict(fx=15, fy=2, headingDeg=0))], seed=7)
-            states = env.step({}, 1500)
+            env.reset([RobotSlot(team=254, alliance="blue", start=dict(fx=1.5, fy=2, headingDeg=0)),
+                       RobotSlot(team=2910, alliance="red", start=dict(fx=15, fy=2, headingDeg=0))], seed=7)
+            states = env.step({}, 1500).views
             bot, opponent = StrategicImAI(specs[254]), ImAI(specs[2910])
             force(bot, Role("Defender", 1))
             before = next(d["fuel"] for d in env.view["drivers"] if d["robot"] == 1)
@@ -242,7 +242,7 @@ def test_defender_engine_smoke(specs, capsys):
                 inputs = {1: opponent.act(states[1])}
                 if defended:
                     inputs[0] = bot.act(states[0])
-                states = env.step(inputs, 3)
+                states = env.step(inputs, 3).views
                 fouls_by_me.extend(e for e in env.view["events"] if e["t"] == "foul" and e["by"] == 0)
                 a, b = states[0].robots
                 minimum_distance = min(minimum_distance, math.hypot(a.x-b.x, a.z-b.z))
