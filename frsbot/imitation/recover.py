@@ -9,14 +9,14 @@ from pathlib import Path
 
 import numpy as np
 
-from frsbot.core.field import ALLIANCES, HUB_CENTRES
+from frsbot.core.field import ALLIANCES
 from frsbot.core.inputs import Inputs
 from frsbot.core.specs import load_specs
+from frsbot.imitation.buttons import agreement, interval_buttons, transition_buttons
 from frsbot.imitation.contacts import contact_flags
 from frsbot.imitation.labels import label_segments
-from frsbot.imitation.ownership import carried_owners
 from frsbot.replay.convert import convert
-from frsbot.replay.rbrp import POS_SCALE, parse, robot_pose
+from frsbot.replay.rbrp import parse, robot_pose
 from frsbot.scrape.harvest import DATA, EXCLUDE_NAMES
 from frsbot.sim.wasm_env import WasmEnv
 
@@ -67,29 +67,17 @@ def _bodies(replay, ticks, k):
     result = []
     for i in range(len(replay.robots)):
         body = robot_pose(replay.frames[k][1], replay, i)
-        orientations = [robot_pose(replay.frames[j][1], replay, i)["quat"] for j in (previous, following)]
+        neighbors = [robot_pose(replay.frames[j][1], replay, i) for j in (previous, following)]
+        orientations = [sample["quat"] for sample in neighbors]
         delta = 2 * (math.atan2(orientations[1][1], orientations[1][3]) -
                      math.atan2(orientations[0][1], orientations[0][3]))
-        result.append(dict(pos=body["pos"], quat=body["quat"], vel=body["vel"],
+        estimated = [(b - a) / dt for a, b in zip(neighbors[0]["pos"], neighbors[1]["pos"])] if dt else body["vel"]
+        result.append(dict(pos=body["pos"], quat=body["quat"], vel=body["vel"], estimatedVel=estimated,
                            hopper=body["hopperFuel"], omega=math.remainder(delta, 2 * math.pi) / dt if dt else 0))
     return result
 
 
-def _button_hints(states, ticks, k, goals, specs):
-    near = min(bisect_left(ticks, ticks[k] + 24, lo=k), len(ticks) - 1)
-    future = min(bisect_left(ticks, ticks[k] + 90, lo=k), len(ticks) - 1)
-    hints = []
-    for i, (robot, goal) in enumerate(zip(states[k].robots, goals)):
-        spec = specs[robot.team]
-        hx, hz, _ = HUB_CENTRES[robot.alliance]
-        in_range = math.hypot(robot.x - hx, robot.z - hz) <= (spec.max_range or max(spec.hub_shot["distance"])) + .5
-        hopper = [state.robots[i].hopper for state in states[k:future + 1]]
-        hints.append([goal.kind == "Collect" or states[near].robots[i].hopper > robot.hopper,
-                      in_range and robot.hopper > 0 and min(hopper) < robot.hopper and goal.kind == "Score"])
-    return hints
-
-
-def make_segment(replay, states, ticks, indices, specs, owners):
+def make_segment(replay, states, ticks, indices, specs, buttons):
     start = indices[0]
     previous = start - 1 if start and 0 < ticks[start] - ticks[start - 1] <= 12 else start
     before, now = states[previous].fuel, states[start].fuel
@@ -99,13 +87,14 @@ def make_segment(replay, states, ticks, indices, specs, owners):
     vel[np.linalg.norm(vel, axis=1) > 25] = 0
     recorded = states[start:indices[-1] + 1]
     goals = label_segments(recorded, specs)
-    frames = [dict(tick=ticks[k], bodies=_bodies(replay, ticks, k), fuel=_fuel(states[k]),
-                   buttons=_button_hints(states, ticks, k, goals, specs)) for k in indices]
+    frames = [dict(tick=ticks[k], bodies=_bodies(replay, ticks, k), fuel=_fuel(states[k])) for k in indices]
+    for frame, row in zip(frames, interval_buttons(buttons, ticks, indices)):
+        frame["buttons"] = row
     robots = [dict(id=r["id"], team=r["team"], alliance=r["alliance"],
                    start=r.get("start") or dict(fx=0, fy=0, headingDeg=0), speed=specs[r["team"]].max_speed,
                    turnRate=specs[r["team"]].turn_rate) for r in replay.robots]
     payload = dict(robots=robots, seed=replay.start["seed"], contacts=contact_flags(recorded, specs),
-                   initialFuel=dict(frames[0]["fuel"], vel=vel.ravel().tolist(), owners=owners), frames=frames)
+                   initialFuel=dict(frames[0]["fuel"], vel=vel.ravel().tolist()), frames=frames)
     return goals, payload
 
 
@@ -124,20 +113,28 @@ def _run(segment):
         return {"rejection": str(error)}
 
 
-def write_run(path, source, states, ticks, selections, goals, results, contacts=None):
+def write_run(path, source, states, ticks, selections, goals, results, contacts=None, legacy=None,
+              field_relative=True):
     start = np.array([k for segment in selections for k in segment[:-1]])
     end = np.array([k for segment in selections for k in segment[1:]])
     robot_states = [states[k].robots for k in start]
     residual = np.concatenate([r["residuals"] for r in results]).astype(np.float32)
     controls = np.concatenate([r["controls"] for r in results])
-    packets = np.array([[list(Inputs(x, y, turn, bool(intake), bool(score), field_relative=True).encode())
+    packets = np.array([[list(Inputs(x, y, turn, bool(intake), bool(score), field_relative=field_relative).encode())
                          for x, y, turn, intake, score in row] for row in controls], dtype=np.uint8)
     segment_lengths = [len(segment) - 1 for segment in selections]
     segment_id = np.repeat(np.arange(len(selections)), segment_lengths)
-    flagged = (residual[:, :, 0] > .1) | (residual[:, :, 1] > .2) | (residual[:, :, 3] > 2) | (residual[:, :, 5] < .7)
+    tick = np.asarray(ticks)[start]
+    duration = np.asarray(ticks)[end] - tick
+    comparisons = {}
+    if legacy is not None and legacy.exists():
+        with np.load(legacy, allow_pickle=False) as old:
+            if np.array_equal(old["robot_id"], [r.id for r in states[0].robots]):
+                comparisons["button_agreement"] = agreement(tick, duration, packets, old)
+    flagged = residual[:, :, 0] > .1
     np.savez_compressed(
         path, version=1, source=source, segment=segment_id,
-        tick=np.asarray(ticks)[start], ticks=np.asarray(ticks)[end] - np.asarray(ticks)[start],
+        tick=tick, ticks=duration,
         t=[states[k].t for k in start], phase=[states[k].phase.value for k in start],
         hub_active=[[states[k].hubs[a].active for a in ALLIANCES] for k in start],
         hub_toggle=[[states[k].hubs[a].seconds_to_toggle for a in ALLIANCES] for k in start],
@@ -149,15 +146,16 @@ def write_run(path, source, states, ticks, selections, goals, results, contacts=
         fuel_pos=np.array([states[k].fuel.pos for k in start], dtype=np.float32),
         fuel_where=np.array([states[k].fuel.where for k in start], dtype=np.uint8),
         inputs=packets, axes=controls[:, :, :3], residual=residual, residual_names=RESIDUALS,
-        flagged=flagged, weight=np.where(flagged, .25, 1.).astype(np.float32),
+        flagged=flagged, weight=np.exp(-residual[:, :, 0] / .1),
         goal_kind=np.array([[g.kind for g in row] for row in goals])[segment_id],
         goal_point=np.array([[g.point for g in row] for row in goals], dtype=np.float32)[segment_id],
         initial_hopper=[r["initialHoppers"] for r in results],
+        **comparisons,
         **({} if contacts is None else {"contacts": np.asarray(contacts, dtype=np.uint8)}),
     )
 
 
-def recover_run(pool, path, source, destination, control_ticks, limit):
+def recover_run(pool, path, source, destination, control_ticks, limit, legacy=None, options=None):
     replay = parse(path.read_bytes(), fuel=True)
     if excluded(replay, source):
         print(f"excluded {path.name}: driver 404", flush=True)
@@ -172,11 +170,12 @@ def recover_run(pool, path, source, destination, control_ticks, limit):
         print(f"skipped {path.name}: no complete 2 s segments", flush=True)
         return
     goals, contacts = [], []
-    owners = carried_owners(states, replay.events, {s[0] for s in selections})
+    buttons = transition_buttons(states, ticks, replay.events)
 
     def jobs():
         for selection in selections:
-            labels, segment = make_segment(replay, states, ticks, selection, specs, owners[selection[0]])
+            labels, segment = make_segment(replay, states, ticks, selection, specs, buttons)
+            segment.update(options or {})
             goals.append(labels)
             contacts.append(segment["contacts"])
             yield segment
@@ -192,7 +191,8 @@ def recover_run(pool, path, source, destination, control_ticks, limit):
         print(f"skipped {path.name}: all segments rejected", flush=True)
         return
     selections, goals, results, contacts = ([xs[i] for i in valid] for xs in (selections, goals, results, contacts))
-    write_run(destination, source, states, ticks, selections, goals, results, contacts)
+    write_run(destination, source, states, ticks, selections, goals, results, contacts, legacy,
+              field_relative=not (options or {}).get("robotRelative", False))
     print(f"{source} {path.name}: {len(selections)} segments, {sum(len(s) - 1 for s in selections)} frames", flush=True)
 
 
@@ -201,6 +201,8 @@ def main():
     parser.add_argument("--solo", type=Path, default=DATA / "raw")
     parser.add_argument("--multiplayer", type=Path, default=DATA / "raw_mp")
     parser.add_argument("--output", type=Path, default=DATA / "imitation")
+    parser.add_argument("--legacy", type=Path, help="old engine-searched archive for button agreement")
+    parser.add_argument("--robot-relative", action="store_true")
     parser.add_argument("--workers", type=int, default=len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count())
     parser.add_argument("--control-ticks", type=int, default=2)
     parser.add_argument("--segments-per-replay", type=int, default=0, help="evenly spaced subset; 0 uses all segments")
@@ -217,7 +219,9 @@ def main():
     pool = mp.Pool(args.workers)
     try:
         for source, path, stem in sources:
-            recover_run(pool, path, source, args.output / f"{source}-{stem}.npz", args.control_ticks, args.segments_per_replay)
+            name = f"{source}-{stem}.npz"
+            recover_run(pool, path, source, args.output / name, args.control_ticks, args.segments_per_replay,
+                        args.legacy / name if args.legacy else None, dict(robotRelative=args.robot_relative))
     except BaseException:
         pool.terminate()
         raise

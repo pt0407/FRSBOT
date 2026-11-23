@@ -20,6 +20,7 @@ def summarize(paths):
             endpoints = run["residual"][end]
             residuals = endpoints.reshape(-1, len(RESIDUALS))
             flags = run["contacts"] if "contacts" in run else None
+            buttons = (run["inputs"][:, :, 1, None] & np.array([1, 2])) != 0
             runs[str(run["source"])].append(dict(
                 segments=int(np.count_nonzero(end)), examples=run["goal_kind"].size,
                 labels=Counter(run["goal_kind"][begin].ravel()), residuals=residuals,
@@ -27,6 +28,9 @@ def summarize(paths):
                 flagged=int(run["flagged"].sum()),
                 contact_free=None if flags is None else endpoints[~flags.any(axis=1), :, 0].ravel(),
                 contacts=None if flags is None else flags.ravel(),
+                button_counts=buttons.sum(axis=(0, 1)),
+                button_ticks=(buttons * run["ticks"][:, None, None]).sum(axis=(0, 1)),
+                agreement=run["button_agreement"] if "button_agreement" in run else None,
             ))
     return {name: _summary(group) for name, group in
             [("all", [r for group in runs.values() for r in group]), *sorted(runs.items())] if group}
@@ -44,6 +48,7 @@ def _summary(group):
             mask = (flags & bit != 0) if bit else (flags == 0)
             causes[label] = (int(mask.sum()), int((poses[mask] >= .1).sum()),
                              float(np.percentile(poses[mask], 90) * 100) if mask.any() else None)
+    comparisons = [r["agreement"] for r in group if r["agreement"] is not None]
     return dict(
         replays=len(group), segments=sum(r["segments"] for r in group),
         examples=sum(r["examples"] for r in group), flagged=sum(r["flagged"] for r in group),
@@ -57,6 +62,9 @@ def _summary(group):
         initial_hopper=float(np.mean(np.concatenate([r["initial_hopper"] for r in group]))),
         hopper=float(np.mean(residuals[:, 3] == 0)),
         fuel_where=float(residuals[:, 4].mean()), fuel=float(residuals[:, 5].mean()),
+        button_counts=np.sum([r["button_counts"] for r in group], axis=0),
+        button_ticks=np.sum([r["button_ticks"] for r in group], axis=0),
+        agreement=np.sum(comparisons, axis=0) if comparisons else None,
     )
 
 
@@ -80,6 +88,17 @@ def markdown(summary):
     lines += ["", "Pose is per-robot planar endpoint distance after an uninterrupted ~2 s rollout. "
               "FUEL rates compare indexed balls at the endpoint; position match is within 10 cm and requires equal "
               "where code. Labels are counted once per robot per segment."]
+    lines += ["", "| Source | Button | Positive examples | Positive robot-ticks | Agreement vs legacy | Both on / transition only / legacy only / both off |",
+              "| --- | --- | ---: | ---: | ---: | ---: |"]
+    for kind, row in summary.items():
+        for i, button in enumerate(("Intake", "Score")):
+            comparison = row["agreement"]
+            counts, accuracy = "—", "—"
+            if comparison is not None and comparison[i].sum():
+                tp, fp, fn, tn = comparison[i]
+                counts = f"{tp:,} / {fp:,} / {fn:,} / {tn:,}"
+                accuracy = f"{(tp + tn) / comparison[i].sum():.1%}"
+            lines.append(f"| {kind} | {button} | {row['button_counts'][i]:,} | {row['button_ticks'][i]:,} | {accuracy} | {counts} |")
     if any(row["causes"] for row in summary.values()):
         lines += ["", "| Source | Replay proxy | Robot endpoints | Error ≥10 cm | Pose p90 |",
                   "| --- | --- | ---: | ---: | ---: |"]
