@@ -17,6 +17,10 @@ class ImAI:
         self.collect_until = -math.inf
         self.collect_deadline = -math.inf
         self.collect_target = 0
+        self.hint = None
+        if PARAMS["learned_hint"]:
+            from frsbot.imitation.learned_hint import load, make_hint
+            self.hint = make_hint(load(), self.planner, PARAMS["hint_threshold"])
 
     def act(self, state: GameState) -> Inputs:
         if state.phase in (Phase.COUNTDOWN, Phase.SETTLE, Phase.DONE):
@@ -34,7 +38,8 @@ class ImAI:
             self.collect_target = 0
         arrived = self.goal is not None and self.goal.kind == "Collect" and math.hypot(robot.x - self.goal.point[0], robot.z - self.goal.point[1]) < .3
         if state.t >= self.next_plan or arrived or not self.planner.valid(self.goal, state):
-            self.goal = self.planner.plan(state)
+            hinted = self.hint(state) if self.hint else None
+            self.goal = hinted or self.planner.plan(state)
             self.next_plan = state.t + PARAMS["replan_s"]
         if state.t >= 160 and self.goal.kind != "Score":
             return Inputs(field_relative=True)
