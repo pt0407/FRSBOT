@@ -1,0 +1,7 @@
+{
+  "1114": {"startup_seconds": 1.283, "drain_rate": 19.904},
+  "254": {"startup_seconds": 1.4, "drain_rate": 25.714},
+  "2910": {"score_arc_degrees": [-35, 35], "startup_seconds": 1.3, "drain_rate": 30.37},
+  "4414": {"shoot_while_collecting": true, "startup_seconds": 0.5, "drain_rate": 14.009},
+  "60026": {"startup_seconds": 1.133, "drain_rate": 9.017}
+}

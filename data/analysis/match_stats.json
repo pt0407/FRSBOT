@@ -1,0 +1,1474 @@
+{
+  "matches": [
+    {
+      "source": "data/raw_mp/ranked-AABV-1795385738579.0.rbrp",
+      "partial": true,
+      "duration_seconds": 31.46666666666667,
+      "robots": 6,
+      "samples": 1710,
+      "label_counts": {
+        "Collect": 635,
+        "Score": 938,
+        "Feed": 32,
+        "Defend": 0,
+        "Idle": 105
+      },
+      "role_timelines_5s": [
+        {
+          "id": 26166,
+          "periods": [
+            {
+              "t": 130,
+              "label": "Collect"
+            },
+            {
+              "t": 135,
+              "label": "Score"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Score"
+            },
+            {
+              "t": 150,
+              "label": "Idle"
+            },
+            {
+              "t": 155,
+              "label": "Idle"
+            }
+          ]
+        },
+        {
+          "id": 26178,
+          "periods": [
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 25302,
+          "periods": [
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Score"
+            },
+            {
+              "t": 150,
+              "label": "Collect"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 25816,
+          "periods": [
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Collect"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Feed"
+            }
+          ]
+        },
+        {
+          "id": 25053,
+          "periods": [
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Collect"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 24981,
+          "periods": [
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Score"
+            },
+            {
+              "t": 150,
+              "label": "Collect"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            }
+          ]
+        }
+      ],
+      "hopper_drop_suppression": [
+        {
+          "id": 26166,
+          "team": 1678,
+          "defended": {
+            "seconds": 0.0,
+            "drops": 0.0,
+            "samples": 0,
+            "drops_per_second": null
+          },
+          "clear": {
+            "seconds": 24.80000000000001,
+            "drops": 119.0,
+            "samples": 248,
+            "drops_per_second": 4.798387096774191
+          }
+        },
+        {
+          "id": 26178,
+          "team": 254,
+          "defended": {
+            "seconds": 0.0,
+            "drops": 0.0,
+            "samples": 0,
+            "drops_per_second": null
+          },
+          "clear": {
+            "seconds": 17.299999999999983,
+            "drops": 204.0,
+            "samples": 173,
+            "drops_per_second": 11.791907514450878
+          }
+        },
+        {
+          "id": 25302,
+          "team": 2910,
+          "defended": {
+            "seconds": 0.0,
+            "drops": 0.0,
+            "samples": 0,
+            "drops_per_second": null
+          },
+          "clear": {
+            "seconds": 13.699999999999989,
+            "drops": 197.0,
+            "samples": 137,
+            "drops_per_second": 14.379562043795632
+          }
+        },
+        {
+          "id": 25816,
+          "team": 1678,
+          "defended": {
+            "seconds": 0.0,
+            "drops": 0.0,
+            "samples": 0,
+            "drops_per_second": null
+          },
+          "clear": {
+            "seconds": 12.5,
+            "drops": 163.0,
+            "samples": 125,
+            "drops_per_second": 13.04
+          }
+        },
+        {
+          "id": 25053,
+          "team": 254,
+          "defended": {
+            "seconds": 0.0,
+            "drops": 0.0,
+            "samples": 0,
+            "drops_per_second": null
+          },
+          "clear": {
+            "seconds": 12.300000000000011,
+            "drops": 205.0,
+            "samples": 123,
+            "drops_per_second": 16.66666666666665
+          }
+        },
+        {
+          "id": 24981,
+          "team": 2910,
+          "defended": {
+            "seconds": 0.09999999999999432,
+            "drops": 0.0,
+            "samples": 1,
+            "drops_per_second": 0.0
+          },
+          "clear": {
+            "seconds": 13.299999999999983,
+            "drops": 176.0,
+            "samples": 133,
+            "drops_per_second": 13.233082706766934
+          }
+        }
+      ],
+      "attributed_scoring_rates": [
+        {
+          "id": 26166,
+          "team": 1678,
+          "defended_rate": {
+            "seconds": 0.0,
+            "fuel": 0,
+            "fuel_per_second": null
+          },
+          "undefended_rate": {
+            "seconds": 11.633333333333354,
+            "fuel": 115,
+            "fuel_per_second": 9.885386819484223
+          }
+        },
+        {
+          "id": 26178,
+          "team": 254,
+          "defended_rate": {
+            "seconds": 0.0,
+            "fuel": 0,
+            "fuel_per_second": null
+          },
+          "undefended_rate": {
+            "seconds": 13.866666666666703,
+            "fuel": 198,
+            "fuel_per_second": 14.278846153846116
+          }
+        },
+        {
+          "id": 25302,
+          "team": 2910,
+          "defended_rate": {
+            "seconds": 0.0,
+            "fuel": 0,
+            "fuel_per_second": null
+          },
+          "undefended_rate": {
+            "seconds": 11.333333333333343,
+            "fuel": 173,
+            "fuel_per_second": 15.264705882352928
+          }
+        },
+        {
+          "id": 25816,
+          "team": 1678,
+          "defended_rate": {
+            "seconds": 0.0,
+            "fuel": 0,
+            "fuel_per_second": null
+          },
+          "undefended_rate": {
+            "seconds": 11.133333333333297,
+            "fuel": 133,
+            "fuel_per_second": 11.946107784431176
+          }
+        },
+        {
+          "id": 25053,
+          "team": 254,
+          "defended_rate": {
+            "seconds": 0.0,
+            "fuel": 0,
+            "fuel_per_second": null
+          },
+          "undefended_rate": {
+            "seconds": 10.550000000000011,
+            "fuel": 187,
+            "fuel_per_second": 17.725118483412302
+          }
+        },
+        {
+          "id": 24981,
+          "team": 2910,
+          "defended_rate": {
+            "seconds": 0.08333333333334281,
+            "fuel": 0,
+            "fuel_per_second": 0.0
+          },
+          "undefended_rate": {
+            "seconds": 11.333333333333343,
+            "fuel": 146,
+            "fuel_per_second": 12.88235294117646
+          }
+        }
+      ],
+      "evasion_windows": {
+        "keep_shooting": 1
+      },
+      "nearest_opponent_m_quantiles": [
+        0.9801979391939163,
+        1.5196780086584134,
+        3.2600644165414887,
+        5.753989612147846,
+        8.136030397300852,
+        10.969967230480997,
+        12.273604930907627
+      ],
+      "pressure_fraction_by_radius": {
+        "1.0": 0.0009689922480620155,
+        "1.5": 0.09786821705426356,
+        "2.0": 0.14437984496124032
+      }
+    },
+    {
+      "source": "data/raw_mp/ranked-MRMN-1795385738579.0.rbrp",
+      "partial": true,
+      "duration_seconds": 152.83333333333334,
+      "robots": 4,
+      "samples": 5996,
+      "label_counts": {
+        "Collect": 1845,
+        "Score": 1564,
+        "Feed": 565,
+        "Defend": 34,
+        "Idle": 1988
+      },
+      "role_timelines_5s": [
+        {
+          "id": 25382,
+          "periods": [
+            {
+              "t": 10,
+              "label": "Score"
+            },
+            {
+              "t": 15,
+              "label": "Collect"
+            },
+            {
+              "t": 20,
+              "label": "Score"
+            },
+            {
+              "t": 25,
+              "label": "Collect"
+            },
+            {
+              "t": 30,
+              "label": "Score"
+            },
+            {
+              "t": 35,
+              "label": "Feed"
+            },
+            {
+              "t": 40,
+              "label": "Feed"
+            },
+            {
+              "t": 45,
+              "label": "Collect"
+            },
+            {
+              "t": 50,
+              "label": "Idle"
+            },
+            {
+              "t": 55,
+              "label": "Score"
+            },
+            {
+              "t": 60,
+              "label": "Score"
+            },
+            {
+              "t": 65,
+              "label": "Score"
+            },
+            {
+              "t": 70,
+              "label": "Collect"
+            },
+            {
+              "t": 75,
+              "label": "Score"
+            },
+            {
+              "t": 80,
+              "label": "Collect"
+            },
+            {
+              "t": 85,
+              "label": "Collect"
+            },
+            {
+              "t": 90,
+              "label": "Feed"
+            },
+            {
+              "t": 95,
+              "label": "Idle"
+            },
+            {
+              "t": 100,
+              "label": "Collect"
+            },
+            {
+              "t": 105,
+              "label": "Score"
+            },
+            {
+              "t": 110,
+              "label": "Score"
+            },
+            {
+              "t": 115,
+              "label": "Score"
+            },
+            {
+              "t": 120,
+              "label": "Score"
+            },
+            {
+              "t": 125,
+              "label": "Collect"
+            },
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Score"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 23381,
+          "periods": [
+            {
+              "t": 10,
+              "label": "Score"
+            },
+            {
+              "t": 15,
+              "label": "Score"
+            },
+            {
+              "t": 20,
+              "label": "Collect"
+            },
+            {
+              "t": 25,
+              "label": "Collect"
+            },
+            {
+              "t": 30,
+              "label": "Collect"
+            },
+            {
+              "t": 35,
+              "label": "Collect"
+            },
+            {
+              "t": 40,
+              "label": "Idle"
+            },
+            {
+              "t": 45,
+              "label": "Feed"
+            },
+            {
+              "t": 50,
+              "label": "Feed"
+            },
+            {
+              "t": 55,
+              "label": "Feed"
+            },
+            {
+              "t": 60,
+              "label": "Collect"
+            },
+            {
+              "t": 65,
+              "label": "Score"
+            },
+            {
+              "t": 70,
+              "label": "Collect"
+            },
+            {
+              "t": 75,
+              "label": "Score"
+            },
+            {
+              "t": 80,
+              "label": "Collect"
+            },
+            {
+              "t": 85,
+              "label": "Feed"
+            },
+            {
+              "t": 90,
+              "label": "Collect"
+            },
+            {
+              "t": 95,
+              "label": "Collect"
+            },
+            {
+              "t": 100,
+              "label": "Feed"
+            },
+            {
+              "t": 105,
+              "label": "Collect"
+            },
+            {
+              "t": 110,
+              "label": "Idle"
+            },
+            {
+              "t": 115,
+              "label": "Collect"
+            },
+            {
+              "t": 120,
+              "label": "Score"
+            },
+            {
+              "t": 125,
+              "label": "Collect"
+            },
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Score"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Score"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 25714,
+          "periods": [
+            {
+              "t": 10,
+              "label": "Score"
+            },
+            {
+              "t": 15,
+              "label": "Score"
+            },
+            {
+              "t": 20,
+              "label": "Collect"
+            },
+            {
+              "t": 25,
+              "label": "Idle"
+            },
+            {
+              "t": 30,
+              "label": "Idle"
+            },
+            {
+              "t": 35,
+              "label": "Collect"
+            },
+            {
+              "t": 40,
+              "label": "Collect"
+            },
+            {
+              "t": 45,
+              "label": "Collect"
+            },
+            {
+              "t": 50,
+              "label": "Idle"
+            },
+            {
+              "t": 55,
+              "label": "Score"
+            },
+            {
+              "t": 60,
+              "label": "Collect"
+            },
+            {
+              "t": 65,
+              "label": "Feed"
+            },
+            {
+              "t": 70,
+              "label": "Feed"
+            },
+            {
+              "t": 75,
+              "label": "Collect"
+            },
+            {
+              "t": 80,
+              "label": "Collect"
+            },
+            {
+              "t": 85,
+              "label": "Score"
+            },
+            {
+              "t": 90,
+              "label": "Collect"
+            },
+            {
+              "t": 95,
+              "label": "Collect"
+            },
+            {
+              "t": 100,
+              "label": "Idle"
+            },
+            {
+              "t": 105,
+              "label": "Idle"
+            },
+            {
+              "t": 110,
+              "label": "Feed"
+            },
+            {
+              "t": 115,
+              "label": "Feed"
+            },
+            {
+              "t": 120,
+              "label": "Feed"
+            },
+            {
+              "t": 125,
+              "label": "Collect"
+            },
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Score"
+            },
+            {
+              "t": 140,
+              "label": "Collect"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 26077,
+          "periods": [
+            {
+              "t": 10,
+              "label": "Idle"
+            },
+            {
+              "t": 15,
+              "label": "Idle"
+            },
+            {
+              "t": 20,
+              "label": "Idle"
+            },
+            {
+              "t": 25,
+              "label": "Idle"
+            },
+            {
+              "t": 30,
+              "label": "Idle"
+            },
+            {
+              "t": 35,
+              "label": "Idle"
+            },
+            {
+              "t": 40,
+              "label": "Idle"
+            },
+            {
+              "t": 45,
+              "label": "Idle"
+            },
+            {
+              "t": 50,
+              "label": "Idle"
+            },
+            {
+              "t": 55,
+              "label": "Idle"
+            },
+            {
+              "t": 60,
+              "label": "Idle"
+            },
+            {
+              "t": 65,
+              "label": "Idle"
+            },
+            {
+              "t": 70,
+              "label": "Idle"
+            },
+            {
+              "t": 75,
+              "label": "Idle"
+            },
+            {
+              "t": 80,
+              "label": "Idle"
+            },
+            {
+              "t": 85,
+              "label": "Idle"
+            },
+            {
+              "t": 90,
+              "label": "Idle"
+            },
+            {
+              "t": 95,
+              "label": "Idle"
+            },
+            {
+              "t": 100,
+              "label": "Idle"
+            },
+            {
+              "t": 105,
+              "label": "Idle"
+            },
+            {
+              "t": 110,
+              "label": "Idle"
+            },
+            {
+              "t": 115,
+              "label": "Idle"
+            },
+            {
+              "t": 120,
+              "label": "Idle"
+            },
+            {
+              "t": 125,
+              "label": "Idle"
+            },
+            {
+              "t": 130,
+              "label": "Idle"
+            },
+            {
+              "t": 135,
+              "label": "Idle"
+            },
+            {
+              "t": 140,
+              "label": "Idle"
+            },
+            {
+              "t": 145,
+              "label": "Idle"
+            },
+            {
+              "t": 150,
+              "label": "Idle"
+            },
+            {
+              "t": 155,
+              "label": "Idle"
+            }
+          ]
+        }
+      ],
+      "hopper_drop_suppression": [
+        {
+          "id": 25382,
+          "team": 9785,
+          "defended": {
+            "seconds": 1.2000000000000028,
+            "drops": 1.0,
+            "samples": 12,
+            "drops_per_second": 0.8333333333333314
+          },
+          "clear": {
+            "seconds": 67.6,
+            "drops": 585.0,
+            "samples": 676,
+            "drops_per_second": 8.653846153846155
+          }
+        },
+        {
+          "id": 23381,
+          "team": 1833,
+          "defended": {
+            "seconds": 0.8999999999999915,
+            "drops": 0.0,
+            "samples": 9,
+            "drops_per_second": 0.0
+          },
+          "clear": {
+            "seconds": 41.7,
+            "drops": 480.0,
+            "samples": 417,
+            "drops_per_second": 11.510791366906474
+          }
+        },
+        {
+          "id": 25714,
+          "team": 9785,
+          "defended": {
+            "seconds": 0.899999999999995,
+            "drops": 0.0,
+            "samples": 9,
+            "drops_per_second": 0.0
+          },
+          "clear": {
+            "seconds": 59.69999999999998,
+            "drops": 306.0,
+            "samples": 597,
+            "drops_per_second": 5.125628140703519
+          }
+        },
+        {
+          "id": 26077,
+          "team": 2056,
+          "defended": {
+            "seconds": 0.5000000000000142,
+            "drops": 0.0,
+            "samples": 5,
+            "drops_per_second": 0.0
+          },
+          "clear": {
+            "seconds": 5.199999999999989,
+            "drops": 0.0,
+            "samples": 52,
+            "drops_per_second": 0.0
+          }
+        }
+      ],
+      "attributed_scoring_rates": [
+        {
+          "id": 25382,
+          "team": 9785,
+          "defended_rate": {
+            "seconds": 1.2833333333333172,
+            "fuel": 0,
+            "fuel_per_second": 0.0
+          },
+          "undefended_rate": {
+            "seconds": 63.93333333333334,
+            "fuel": 561,
+            "fuel_per_second": 8.774765380604796
+          }
+        },
+        {
+          "id": 23381,
+          "team": 1833,
+          "defended_rate": {
+            "seconds": 0.8833333333333258,
+            "fuel": 0,
+            "fuel_per_second": 0.0
+          },
+          "undefended_rate": {
+            "seconds": 38.75000000000003,
+            "fuel": 434,
+            "fuel_per_second": 11.199999999999992
+          }
+        },
+        {
+          "id": 25714,
+          "team": 9785,
+          "defended_rate": {
+            "seconds": 2.3833333333333506,
+            "fuel": 0,
+            "fuel_per_second": 0.0
+          },
+          "undefended_rate": {
+            "seconds": 59.19999999999993,
+            "fuel": 282,
+            "fuel_per_second": 4.763513513513519
+          }
+        },
+        {
+          "id": 26077,
+          "team": 2056,
+          "defended_rate": {
+            "seconds": 2.0333333333333385,
+            "fuel": 0,
+            "fuel_per_second": 0.0
+          },
+          "undefended_rate": {
+            "seconds": 78.24999999999999,
+            "fuel": 0,
+            "fuel_per_second": 0.0
+          }
+        }
+      ],
+      "evasion_windows": {
+        "keep_shooting": 12,
+        "move": 17,
+        "other": 6
+      },
+      "nearest_opponent_m_quantiles": [
+        0.8058265942496562,
+        1.6375888525512137,
+        2.965851133127811,
+        5.074162024413489,
+        8.059283792620782,
+        9.550380834544413,
+        12.929334137920637
+      ],
+      "pressure_fraction_by_radius": {
+        "1.0": 0.01540436456996149,
+        "1.5": 0.08857509627727857,
+        "2.0": 0.14297175866495507
+      }
+    },
+    {
+      "source": "data/raw_mp/ranked-WP6A-1795385935657.0.rbrp",
+      "partial": true,
+      "duration_seconds": 60.400000000000006,
+      "robots": 4,
+      "samples": 2300,
+      "label_counts": {
+        "Collect": 961,
+        "Score": 1048,
+        "Feed": 0,
+        "Defend": 190,
+        "Idle": 101
+      },
+      "role_timelines_5s": [
+        {
+          "id": 25053,
+          "periods": [
+            {
+              "t": 100,
+              "label": "Collect"
+            },
+            {
+              "t": 105,
+              "label": "Score"
+            },
+            {
+              "t": 110,
+              "label": "Collect"
+            },
+            {
+              "t": 115,
+              "label": "Idle"
+            },
+            {
+              "t": 120,
+              "label": "Defend"
+            },
+            {
+              "t": 125,
+              "label": "Defend"
+            },
+            {
+              "t": 130,
+              "label": "Defend"
+            },
+            {
+              "t": 135,
+              "label": "Score"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            },
+            {
+              "t": 160,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 24981,
+          "periods": [
+            {
+              "t": 100,
+              "label": "Score"
+            },
+            {
+              "t": 105,
+              "label": "Score"
+            },
+            {
+              "t": 110,
+              "label": "Collect"
+            },
+            {
+              "t": 115,
+              "label": "Collect"
+            },
+            {
+              "t": 120,
+              "label": "Collect"
+            },
+            {
+              "t": 125,
+              "label": "Collect"
+            },
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            },
+            {
+              "t": 160,
+              "label": "Score"
+            }
+          ]
+        },
+        {
+          "id": 26106,
+          "periods": [
+            {
+              "t": 100,
+              "label": "Defend"
+            },
+            {
+              "t": 105,
+              "label": "Collect"
+            },
+            {
+              "t": 110,
+              "label": "Score"
+            },
+            {
+              "t": 115,
+              "label": "Collect"
+            },
+            {
+              "t": 120,
+              "label": "Score"
+            },
+            {
+              "t": 125,
+              "label": "Collect"
+            },
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Collect"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            },
+            {
+              "t": 160,
+              "label": "Collect"
+            }
+          ]
+        },
+        {
+          "id": 25980,
+          "periods": [
+            {
+              "t": 100,
+              "label": "Idle"
+            },
+            {
+              "t": 105,
+              "label": "Score"
+            },
+            {
+              "t": 110,
+              "label": "Score"
+            },
+            {
+              "t": 115,
+              "label": "Collect"
+            },
+            {
+              "t": 120,
+              "label": "Collect"
+            },
+            {
+              "t": 125,
+              "label": "Idle"
+            },
+            {
+              "t": 130,
+              "label": "Score"
+            },
+            {
+              "t": 135,
+              "label": "Collect"
+            },
+            {
+              "t": 140,
+              "label": "Score"
+            },
+            {
+              "t": 145,
+              "label": "Score"
+            },
+            {
+              "t": 150,
+              "label": "Score"
+            },
+            {
+              "t": 155,
+              "label": "Score"
+            },
+            {
+              "t": 160,
+              "label": "Score"
+            }
+          ]
+        }
+      ],
+      "hopper_drop_suppression": [
+        {
+          "id": 25053,
+          "team": 2481,
+          "defended": {
+            "seconds": 0.0,
+            "drops": 0.0,
+            "samples": 0,
+            "drops_per_second": null
+          },
+          "clear": {
+            "seconds": 16.80000000000001,
+            "drops": 192.0,
+            "samples": 168,
+            "drops_per_second": 11.428571428571422
+          }
+        },
+        {
+          "id": 24981,
+          "team": 6329,
+          "defended": {
+            "seconds": 0.20000000000000284,
+            "drops": 0.0,
+            "samples": 2,
+            "drops_per_second": 0.0
+          },
+          "clear": {
+            "seconds": 13.200000000000017,
+            "drops": 180.0,
+            "samples": 132,
+            "drops_per_second": 13.636363636363619
+          }
+        },
+        {
+          "id": 26106,
+          "team": 7558,
+          "defended": {
+            "seconds": 5.0,
+            "drops": 30.0,
+            "samples": 50,
+            "drops_per_second": 6.0
+          },
+          "clear": {
+            "seconds": 21.69999999999999,
+            "drops": 230.0,
+            "samples": 217,
+            "drops_per_second": 10.599078341013831
+          }
+        },
+        {
+          "id": 25980,
+          "team": 2481,
+          "defended": {
+            "seconds": 8.700000000000031,
+            "drops": 80.0,
+            "samples": 87,
+            "drops_per_second": 9.195402298850542
+          },
+          "clear": {
+            "seconds": 20.59999999999995,
+            "drops": 296.0,
+            "samples": 206,
+            "drops_per_second": 14.368932038834986
+          }
+        }
+      ],
+      "attributed_scoring_rates": [
+        {
+          "id": 25053,
+          "team": 2481,
+          "defended_rate": {
+            "seconds": 0.0,
+            "fuel": 0,
+            "fuel_per_second": null
+          },
+          "undefended_rate": {
+            "seconds": 16.21666666666667,
+            "fuel": 185,
+            "fuel_per_second": 11.408016443987666
+          }
+        },
+        {
+          "id": 24981,
+          "team": 6329,
+          "defended_rate": {
+            "seconds": 1.61666666666666,
+            "fuel": 12,
+            "fuel_per_second": 7.4226804123711645
+          },
+          "undefended_rate": {
+            "seconds": 13.18333333333338,
+            "fuel": 203,
+            "fuel_per_second": 15.398230088495522
+          }
+        },
+        {
+          "id": 26106,
+          "team": 7558,
+          "defended_rate": {
+            "seconds": 4.400000000000034,
+            "fuel": 8,
+            "fuel_per_second": 1.8181818181818041
+          },
+          "undefended_rate": {
+            "seconds": 20.649999999999935,
+            "fuel": 223,
+            "fuel_per_second": 10.799031476997612
+          }
+        },
+        {
+          "id": 25980,
+          "team": 2481,
+          "defended_rate": {
+            "seconds": 10.016666666666652,
+            "fuel": 38,
+            "fuel_per_second": 3.793677204658908
+          },
+          "undefended_rate": {
+            "seconds": 21.983333333333377,
+            "fuel": 274,
+            "fuel_per_second": 12.463987869598157
+          }
+        }
+      ],
+      "evasion_windows": {
+        "keep_shooting": 88,
+        "move": 50,
+        "other": 1
+      },
+      "nearest_opponent_m_quantiles": [
+        0.7826218754928845,
+        1.2136928093344141,
+        1.6444537846956966,
+        3.6443693555950123,
+        7.2928844463637335,
+        9.79894861707112,
+        12.435006332929632
+      ],
+      "pressure_fraction_by_radius": {
+        "1.0": 0.02917981072555205,
+        "1.5": 0.21253943217665616,
+        "2.0": 0.30717665615141954
+      }
+    }
+  ],
+  "label_counts": {
+    "Collect": 3441,
+    "Score": 3550,
+    "Feed": 597,
+    "Defend": 224,
+    "Idle": 2194
+  },
+  "role_time_fractions": {
+    "Collect": 0.343893663801719,
+    "Score": 0.35478712772336596,
+    "Feed": 0.059664201479112534,
+    "Defend": 0.022386568059164502,
+    "Idle": 0.21926843893663803
+  },
+  "suppression_exposure": {
+    "defended": {
+      "seconds": 17.500000000000032,
+      "drops": 111.0,
+      "samples": 175
+    },
+    "clear": {
+      "seconds": 340.4,
+      "drops": 3333.0,
+      "samples": 3404
+    }
+  },
+  "suppression_ratio": 0.6477973511636865,
+  "notes": [
+    "Overlapping 3 s future windows, not independent examples or causal suppression.",
+    "10 Hz hopper-drop rates miss simultaneous intake/shooting; native attributed rates also included.",
+    "1.5 m center-distance pressure matches upstream; no extra bumper-radius inflation.",
+    "Anonymous ranked identities cannot exclude owner 404; exploratory only, not approved training corpus."
+  ]
+}

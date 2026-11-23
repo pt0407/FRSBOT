@@ -1,61 +1,83 @@
 # FRSBOT / ImAI: handoff notes
 
-Goal: an AI driver ("ImAI") for the FRS Simulator 2026 REBUILT game (https://rebuilt.frsim.com).
-It should play singleplayer, 1v1, 2v2, and 3v3 like a strong human, adapt to the robot it drives and to opponents.
+ImAI is a state-only AI driver for FRS Simulator 2026 REBUILT (https://rebuilt.frsim.com),
+targeting solo and 1v1/2v2/3v3. `ImAI(spec).act(GameState) -> Inputs` must not import sim/replay/live.
 
-## Layout
+## Package layout
 
-- `frsbot/rbrp.py`: decoder for RBRP replay files (gzip-compressed on the wire). Robot pose, velocity, quaternion, hopper.
-- `frsbot/harvest.py`: downloads shared leaderboard replays, decodes to `data/telemetry/*.json`, skips driver name `404`.
-- `frsbot/fetch_board.mjs`: pulls the leaderboard over the websocket (`rebuiltBoard`) into `data/board.json`.
-- `frsbot/events.py`: scrapes completed REBUILT events (matches, scores, breakdowns) into `data/events/*.json`.
-- `frsbot/sim.py`: offline drive model ported from the game code. Per-robot feel values, deadzone, acceleration limit, hopper.
-- `frsbot/controller.py`: baseline waypoint follower on a pro route. Writes `data/sim/*.json`.
-- `frsbot/build_viewer.py`: bundles telemetry and sim runs into `viewer/replays.js`.
-- `viewer/index.html`: replay viewer. Serve with `python3 -m http.server 8765` from `viewer/`.
-- `data/robot_feel.json`: per-robot drive values (max speed, turn rate, accel, hopper capacity) from the game bundle.
+- `frsbot/core/`: backend-independent state, inputs/wire codec, match schedule and specs for all 20 robots.
+- `frsbot/bot/`: planner, driver, ImAI interface and calibration; profiles in `data/bot_profiles.json`.
+- `frsbot/sim/wasm_env.py`, `frsbot/sim/engine/`: real-game backend and asset fetcher/Node server.
+  `frsbot/sim/drive.py`, `frsbot/sim/push.py` and `frsbot/baseline/route_follow.py` are legacy models/baselines.
+- `frsbot/replay/`: RBRP/FUEL decoding, spectator packaging and multi-robot GameState conversion.
+- `frsbot/scrape/`: leaderboard/event scraping, replay harvesting, passive spectator capture,
+  continuous recorder, GitHub release upload queue and downloader.
+- `frsbot/analysis/matches.py`: observational FUEL attribution, roles and defense analysis.
+- `frsbot/tools/`: evaluation, benchmarks, calibration/validation and viewer building.
+- `data/robot_feel.json`: all 20 robots' extracted drive, intake and shooting specs.
+  Solo telemetry is in `data/telemetry/`; generated raw replays, engine assets, multiplayer captures
+  and sim traces are gitignored under `data/raw/`, `data/engine/`, `data/raw_mp/` and `data/sim/`.
+- `tests/`: Python/Node tests and recorded fixtures. `viewer/`: replay/sim viewer and bundled runs.
 
-## Facts established
+## Engine and replay facts
 
-- Match: 160 s. Auto 20 s, transition 10 s, four 25 s shifts, end game 30 s.
-- Hubs alternate active and inactive during shifts; the alliance that scores more FUEL in auto starts inactive in shift 1.
-- FUEL: 1 point each when scored in an active hub. Tower L1 15 (auto) / 10, L2 20, L3 30. RP: energized, supercharged, traversal, win 3, tie 1.
-- Replays: a pose sample every 80 ticks (about 1.33 s at 60 ticks/s). Controller inputs are not stored.
-- Robot heading: forward is (cos a, sin a) with a = pi - quaternion yaw (checked against replay velocities, median alignment 0.79).
-- Speed cap confirmed: no replay segment averages above 5.01 m/s.
-- Robot specs: 20 robots. Overload (team 254) hopper capacity 72 matches the top pro run's peak.
-- Practice toggles: Brownouts (battery sag cuts power), Beaching (stuck on FUEL). Blackout is a visibility mode (field dark, robot circle and hub lights only).
+- `WasmEnv` runs the game's real Rust/WASM physics, FUEL, intake, shooting and match rules in a
+  local Node process at 60 Hz. Fetch assets once; **never commit downloaded game files**.
+  Node is found on PATH or under `~/.nvm/versions/node`; put NVM's Node on PATH for all tests.
+- Solo replays are **30 Hz**; the observed ranked spectator stream is **60 Hz**. The 80-tick interval
+  is between keyframes, not pose samples. Replays contain state, not controller inputs.
+- FUEL positions and where-codes are decoded. Observed meanings: `0` resting on field, `1` moving/in
+  flight, `2` in a robot, `3` inside a hub, `4` staged at a human player, `6` being fed in.
+- Coordinates are meters in world x/z; forward is `(cos(a), sin(a))`, with `a = pi - quaternion yaw`.
+  Replay and engine observations share these conventions. Replay gate/mode observations are `None`.
+- Leaderboard inventory: 46 listed shared IDs, 45 usable solo replays across 17 robots; the extra ID
+  returns HTTP 404. Spectator captures include a complete real 2v2 (FJ5S). Ranked identities are
+  anonymized, so account-level training exclusions cannot be guaranteed.
 
-## Known gaps
+## Match schedule
 
-- Replays don't contain controller inputs or the FUEL push model. FUEL positions are in the replay frames but aren't decoded yet.
-- 4 of the 20 robot specs are not mapped to a team or name.
-- Event scrape incomplete (29 of about 55 done). Run `python3 -m frsbot.events` to resume.
-- Turn acceleration limit is assumed (`TURN_ACCEL` in `sim.py`), not confirmed.
-- The bot's FUEL count is copied from the pro's timeline, not decided by the bot.
-- Multiplayer replays: none yet. Only solo leaderboard runs.
+Time is normalized to auto start (countdown is negative), as implemented in `frsbot/core/field.py`:
+auto 0–20 s; gap 20–23; transition 23–33; shifts 33–58, 58–83, 83–108, 108–133;
+endgame 133–163; settle 163–166; done at 166. Both hubs are active in auto, transition and endgame,
+inactive in gap/settle. During shifts they alternate: `firstInactive` is off in shifts 1 and 3.
+FUEL scores one point in an active hub. ImAI drives from t=0 with native `auto="none"`.
 
-## Commands
+## Docs index
 
+- [ARCHITECTURE](docs/ARCHITECTURE.md): core interfaces, planner/driver and engine backend.
+- [TRAINING](docs/TRAINING.md): proposed input recovery, imitation, RL and multiplayer strategy.
+- [LIVE](docs/LIVE.md): proposed browser bridge, latency and teammate intent work.
+- [PERF](docs/PERF.md): proposed JS driver, binary IPC and vector-environment optimizations.
+- [MATCH_ANALYSIS](docs/MATCH_ANALYSIS.md): role/defense methodology and FJ5S findings.
+- [MULTIPLAYER_CAPTURE](docs/MULTIPLAYER_CAPTURE.md): passive capture, continuous recording and releases.
+- [LEADERBOARD_DATA](docs/LEADERBOARD_DATA.md): supported queries, provenance and harvest counts.
+- [IMAI_TUNING](docs/IMAI_TUNING.md): tuning results, calibrations and remaining weaknesses.
+
+## Key commands
+
+Run from the repository root (Node v24.22.2 is available under `~/.nvm/versions/node/`):
+
+```sh
+python3 -m frsbot.sim.engine.fetch
+python3 -m frsbot.tools.evaluate
+python3 -m frsbot.tools.benchmark_engine
+python3 -m frsbot.tools.build_viewer
+python3 -m frsbot.scrape.record_forever
+python3 -m frsbot.scrape.fetch_mp
+~/.nvm/versions/node/v24.22.2/bin/node frsbot/scrape/spectate.mjs --minutes 60 --concurrency 2 --decode --output data/raw_mp/batch
+~/.nvm/versions/node/v24.22.2/bin/node frsbot/scrape/fetch_board.mjs data/board_queries.json --all
+python3 -m frsbot.scrape.harvest data/board.json data/board_queries.json
+python3 -m pytest -q
 ```
-node frsbot/fetch_board.mjs data/board.json
-python3 -m frsbot.harvest data/board.json
-python3 -m frsbot.events
-python3 -m frsbot.controller
-python3 -m frsbot.build_viewer
-```
 
-## Next steps
-
-1. Decode the FUEL section of replay frames (504 balls per run) into per-sample positions.
-2. Fit a push model: how a ball moves when a robot's bumper reaches it. Validate against the next sample.
-3. Let the bot decide its own intake and scoring from hub status and hopper level.
-4. Show hopper count in the viewer.
-5. Map the 4 unnamed robot specs to teams. Make the bot use the robot it is driving.
-6. Find out how the live feed samples robots (is it denser than 80 ticks?).
-7. Decide how to get controller inputs, either a sim outside the browser or a denser live feed.
+Evaluation defaults to 30 full solo matches (five robots, both alliances, three seeds), native auto
+disabled, site-default HP throws/unloads and 20 Hz control. Traces/summary go to `data/sim/imai/`.
+The continuous recorder uses four passive REBUILT watches, compact files, dedupe and restart backoff.
+Export `FRSBOT_GITHUB_TOKEN` for daily `mp-data-YYYYMMDD` release uploads; without it, files stay queued
+locally. `fetch_mp` downloads those releases. Only `rankedLive`/`rankedWatch` are sent by spectators.
 
 ## Constraints
 
 - Don't use a ranked or online room with the bot without checking the game's rules first.
 - Driver name `404` is the owner's account. Its replays are excluded from training data.
+- auto plays like teleop; climbing is rare and not a priority

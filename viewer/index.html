@@ -94,7 +94,7 @@ function poseAt(samples, sec) {
   const a = samples[i], b = samples[Math.min(i + 1, samples.length - 1)];
   const f = b[0] === a[0] ? 0 : Math.min(1, Math.max(0, (tick - a[0]) / (b[0] - a[0])));
   const lerp = (p, q) => p + (q - p) * f;
-  return { x: lerp(a[1], b[1]), z: lerp(a[2], b[2]), yaw: a[3], vx: lerp(a[4], b[4]), vz: lerp(a[5], b[5]), tick };
+  return { x: lerp(a[1], b[1]), z: lerp(a[2], b[2]), yaw: a[3], vx: lerp(a[4], b[4]), vz: lerp(a[5], b[5]), hopper: (tick >= b[0] ? b : a)[6], tick };
 }
 
 function draw() {
@@ -138,7 +138,7 @@ function draw() {
   ctx.moveTo(rx, rz); ctx.lineTo(rx + Math.cos(-p.yaw) * len, rz + Math.sin(-p.yaw) * len); ctx.stroke();
 
   const speed = Math.hypot(p.vx, p.vz);
-  readout.textContent = `t ${t.toFixed(1)} s  tick ${Math.round(p.tick)}  speed ${speed.toFixed(2)} m/s  yaw ${(p.yaw * 180 / Math.PI).toFixed(0)}°`;
+  readout.textContent = `t ${t.toFixed(1)} s  tick ${Math.round(p.tick)}  hopper ${p.hopper ?? '-'}  speed ${speed.toFixed(2)} m/s  yaw ${(p.yaw * 180 / Math.PI).toFixed(0)}°`;
   const total = (S[S.length - 1][0] - S[0][0]) / TICKS_PER_SEC;
   scrub.value = total ? (t / total) * 1000 : 0;
 }

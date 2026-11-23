@@ -1,0 +1,31 @@
+{
+ "params": {
+  "front": 0.4,
+  "back": 0.4,
+  "half": 0.4,
+  "decay": 0.98
+ },
+ "dt": 0.03333333333333333,
+ "train": {
+  "n": 155883,
+  "mean_cm": 0.39,
+  "stay_put_cm": 1.97,
+  "contact_model_cm": 2.29,
+  "contact_stay_put_cm": 7.88
+ },
+ "heldout": {
+  "n": 83910,
+  "mean_cm": 0.36,
+  "stay_put_cm": 1.83,
+  "contact_model_cm": 3.08,
+  "contact_stay_put_cm": 8.22
+ },
+ "runs": [
+  "0lrzopndjphzhbaz",
+  "31z8mk2g2ww2vbhg",
+  "3o491ykfkd4agcra",
+  "4dyo5ezkbpxhkao1",
+  "7s0hcomduyn7qxvh",
+  "9mybq2llqa7avpp0"
+ ]
+}
