@@ -81,7 +81,7 @@ test('batch takes successive mixed modes once, never more than two watches', asy
   assert.equal(decoded.length, 4);
   assert.equal(peak, 2);
   assert(Socket.sent.every(m => m.t === 'rankedLive'));
-  assert.throws(() => batch({ minutes: 1, concurrency: 3 }), /concurrency/);
+  assert.throws(() => batch({ minutes: 1, concurrency: 5 }), /concurrency/);
   assert.throws(() => batch({ minutes: 0 }), /minutes/);
 });
 
@@ -102,4 +102,32 @@ test('batch stops on listing error without retrying', async () => {
     close() {}
   }
   await assert.rejects(batch({ output: mkdtempSync(path.join(os.tmpdir(), 'batch-test-')), minutes: 1, Socket: Broken }), /not retrying/);
+});
+
+test('four-watch mode honors persistent dedupe and external shutdown', async () => {
+  const output = mkdtempSync(path.join(os.tmpdir(), 'batch-four-'));
+  const matches = Array.from({ length: 6 }, (_, i) => ({ code: `ABC${i}`, since: i, game: 1 }));
+  let active = 0, peak = 0;
+  const result = await batch({ output, minutes: .002, concurrency: 4, Socket: server(matches),
+    seenKeys: ['ABC0:0:1'], pollMs: 10,
+    watch: o => new Promise(resolve => {
+      assert.equal(o.context.match_key, `${o.code}:${o.context.since}:1`);
+      peak = Math.max(peak, ++active);
+      setTimeout(() => { active--; resolve({ frames: 0 }); }, 10);
+    }) });
+  assert.equal(peak, 4);
+  assert.equal(result.results.length, 5);
+  const controller = new AbortController();
+  controller.abort();
+  const stopped = await batch({ output, minutes: 10, Socket: server(matches), signal: controller.signal });
+  assert.equal(stopped.results.length, 0);
+});
+
+test('failed watch still queues captured frames for compact recovery', async () => {
+  let decoded = false;
+  await assert.rejects(batch({ output: mkdtempSync(path.join(os.tmpdir(), 'batch-error-')), minutes: 1,
+    Socket: server([{ code: 'ABC1', since: 1, game: 1 }]),
+    watch: async () => { throw Object.assign(new Error('disconnect'), { captureResult: { capture: 'partial', frames: 1 } }); },
+    decode: async target => { assert.equal(target, 'partial'); decoded = true; } }), /disconnect/);
+  assert(decoded);
 });
