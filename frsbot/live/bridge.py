@@ -23,6 +23,8 @@ from frsbot.live.predict import Observations, predict
 INJECT = Path(__file__).with_name("inject.js")
 ROOT = Path(__file__).resolve().parents[2]
 LOG = logging.getLogger(__name__)
+POLL_WITH_PAD = ("([seq, latencySince, pad]) => { window.__imai.writePad(pad);"
+                 " return JSON.stringify(window.__imai.poll(seq, {latencySince})); }")
 GRAPHICS = """() => {
     localStorage.setItem('frc-sim.graphics', 'low');
     localStorage.setItem('rebuilt-sim.settings', JSON.stringify({version: 1, state: {
@@ -81,7 +83,8 @@ async def drive(page, spec, alliance, output, run_id, timeout=300, driver="pytho
             await install(page, spec, horizon())
         while time.monotonic() - started < timeout:
             tick = time.monotonic()
-            packet = await page.evaluate("([seq, latencySince]) => window.__imai.poll(seq, {latencySince})", [seq, timing.since])
+            axes, buttons = inputs_to_pad(last_inputs)
+            packet = json.loads(await page.evaluate(POLL_WITH_PAD, [seq, timing.since, dict(axes=axes, buttons=buttons)]))
             previous_trace = timing.since
             timing.ingest(packet)
             if timing.since != previous_trace:
@@ -114,7 +117,6 @@ async def drive(page, spec, alliance, output, run_id, timeout=300, driver="pytho
                     inputs.climb = False
                     if not inputs.field_relative:
                         raise RuntimeError("ImAI requested robot-relative input; no fieldRelative pad binding")
-                    await write_pad(page, inputs)
                     last_inputs = inputs
                     acts += 1
                 record(dict(kind="step", t=state.t, wall_time=time.time(), seq=seq,
@@ -123,7 +125,7 @@ async def drive(page, spec, alliance, output, run_id, timeout=300, driver="pytho
                             blocked=packet["blocked"], sent_input=packet["input"], driver_status=status))
                 if state.phase == Phase.DONE:
                     break
-            await asyncio.sleep(max(0, 1 / 30 - (time.monotonic() - tick)))
+            await asyncio.sleep(0)
         else:
             raise TimeoutError(f"solo match did not end within {timeout} seconds")
         if planning is not None:
@@ -156,13 +158,17 @@ async def run(args, spec):
     args.out.mkdir(parents=True, exist_ok=True)
     run_id = datetime.now(timezone.utc).strftime(f"imai-{spec.team}-{args.alliance}-%Y%m%dT%H%M%S%fZ")
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=not args.headed,
-            env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":0"),
-                 "XAUTHORITY": os.environ.get("XAUTHORITY", str(Path.home() / ".Xauthority"))},
-            args=["--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--no-sandbox"])
+        if args.cdp:
+            browser = await playwright.chromium.connect_over_cdp(args.cdp)
+        else:
+            browser = await playwright.chromium.launch(headless=not args.headed,
+                env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":0"),
+                     "XAUTHORITY": os.environ.get("XAUTHORITY", str(Path.home() / ".Xauthority"))},
+                args=["--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--no-sandbox"])
         page = None
         try:
-            page = await browser.new_page(viewport=dict(width=640, height=360), device_scale_factor=1)
+            page = await (browser.contexts[0].new_page() if args.cdp
+                          else browser.new_page(viewport=dict(width=640, height=360), device_scale_factor=1))
             await page.add_init_script(path=str(INJECT))
             await page.add_init_script(script=f"({GRAPHICS})()")
             await start_solo(page, spec.team, args.alliance)
@@ -175,7 +181,11 @@ async def run(args, spec):
                     await page.evaluate("() => { if (window.__imai) { window.__imai.driver = null; window.__imai.zero(); } }")
                 except Exception:
                     LOG.exception("could not zero pad before closing browser")
-            await browser.close()
+            if args.cdp:
+                if page is not None and not page.is_closed():
+                    await page.close()
+            else:
+                await browser.close()
 
 
 def main():
@@ -184,6 +194,7 @@ def main():
     parser.add_argument("--alliance", choices=("blue", "red"), default="blue")
     parser.add_argument("--mode", choices=("solo",), default="solo")
     parser.add_argument("--headed", action="store_true")
+    parser.add_argument("--cdp", metavar="URL", help="attach to an already-running Chrome, e.g. http://127.0.0.1:9222")
     parser.add_argument("--driver", choices=("python", "page"), default="python")
     parser.add_argument("--calibrate", type=int, default=6, metavar="N")
     parser.add_argument("--latency", type=latency_arg, default="auto", metavar="auto|MS")

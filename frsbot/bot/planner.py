@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from frsbot.core.field import HUB_CENTRES
+from frsbot.bot.tuning import PARAMS
 from frsbot.core.specs import RobotSpec
 from frsbot.core.state import GameState, Phase
 from frsbot.bot.calibration import profile
@@ -62,7 +63,7 @@ class Planner:
                           for deg in self.profile["score_arc_degrees"]]
         preferred = (cx + radius * math.cos(heading), cz + radius * math.sin(heading))
         if self.avoid_slots:
-            free = [p for p in candidates if all(math.dist(p, slot) >= 1.5 for slot in self.avoid_slots)]
+            free = [p for p in candidates if all(math.dist(p, slot) >= PARAMS["avoid_slot_m"] for slot in self.avoid_slots)]
             if free:
                 candidates = free
         return min(candidates, key=lambda p: math.dist(p, preferred))
@@ -115,13 +116,13 @@ class Planner:
             if any(abs(x - cx) < 1.3 and abs(z - cz) < 1.3 for cx, cz, _ in HUB_CENTRES.values()):
                 continue
             if any(math.hypot(x - cx, z - cz) < 2 for cx, cz, _ in HUB_CENTRES.values()):
-                value *= .8
+                value *= PARAMS["hub_near_scale"]
             if self.goal and self.goal.kind == "Collect" and math.hypot(x - self.goal.point[0], z - self.goal.point[1]) < .8:
-                value *= 1.25
+                value *= PARAMS["goal_commit"]
             result.append((value, (x, z)))
         if self.avoid_points:
             free = [(value, point) for value, point in result
-                    if all(math.dist(point, other) >= .8 for other in self.avoid_points)]
+                    if all(math.dist(point, other) >= PARAMS["avoid_point_m"] for other in self.avoid_points)]
             if any(value >= 2 for value, _ in free):
                 result = free
         return sorted(result, reverse=True)

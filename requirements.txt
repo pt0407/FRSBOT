@@ -2,3 +2,5 @@
 numpy==2.5.5
 pytest==9.2.0
 scikit-learn==1.9.1
+playwright==1.65.2
+torch==2.15.0

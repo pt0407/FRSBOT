@@ -8,3 +8,5 @@ data/raw_mp/
 data/imitation/
 data/live/
 data/cache/
+.venv/
+data/tune/

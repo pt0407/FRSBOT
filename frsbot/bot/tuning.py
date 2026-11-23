@@ -1,0 +1,10 @@
+"""ImAI's tunable constants. Defaults are the shipped values.
+
+IMAI_PARAMS='{"collect_frac": 0.4}' overrides them for a sweep; worker processes inherit the environment.
+"""
+import json
+import os
+
+DEFAULTS = dict(collect_frac=0.3, collect_min=10.0, replan_s=0.5, avoid_slot_m=1.5,
+                hub_near_scale=0.8, goal_commit=1.25, avoid_point_m=0.8)
+PARAMS = {**DEFAULTS, **json.loads(os.environ.get("IMAI_PARAMS", "{}"))}
