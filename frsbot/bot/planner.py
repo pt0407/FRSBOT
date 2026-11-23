@@ -158,7 +158,7 @@ class Planner:
             return Goal("Score", (robot.x, robot.z)) if robot.hopper and hub.active and own_side and low <= distance <= high else Goal("Stage", (robot.x, robot.z))
         clusters = self.clusters(state)
         if hub.active and robot.hopper and (hub.seconds_to_toggle <= score_time + 1 or
-                robot.hopper >= .85 * self.capacity(state) or not clusters or clusters[0][0] < 2):
+                robot.hopper >= PARAMS["score_full_frac"] * self.capacity(state) or not clusters or clusters[0][0] < 2):
             goal = Goal("Score", spot)
         elif not hub.active and robot.hopper and (robot.hopper >= PARAMS["stage_full_frac"] * self.capacity(state) or hub.seconds_to_toggle < score_time + PARAMS["arrive_margin_s"]):
             goal = Goal("Stage", spot)
