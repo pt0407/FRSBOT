@@ -3,6 +3,11 @@
 Team 2910, CLHNB666 replay. Blue uses the pro start; red uses the 180-degree mirror.
 Usage: PYTHONPATH=. python -m frsbot.tools.auto_mimic  (prints final and 20 s scores; no bot defaults change)
 """
+import bisect
+import json
+import math
+import statistics as st
+
 from frsbot.core.specs import load_specs
 from frsbot.core.inputs import Inputs
 from frsbot.imitation.dataset import examples
