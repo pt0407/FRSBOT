@@ -1,6 +1,7 @@
 import json
 import math
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -55,7 +56,7 @@ def test_js_decoder_and_safety():
                                   ("--latency", "nan"), ("--latency", "-1"), ("--calibrate", "-1"),
                                   ("--driver", "online")])
 def test_cli_rejects_unsafe_or_unknown_setup(args):
-    result = subprocess.run(["/usr/bin/python3", "-m", "frsbot.live.bridge", "--team", "254", *args],
+    result = subprocess.run([sys.executable, "-m", "frsbot.live.bridge", "--team", "254", *args],
                             cwd=ROOT, capture_output=True, text=True, timeout=15)
     assert result.returncode == 2
     assert "error:" in result.stderr

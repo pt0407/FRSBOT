@@ -25,11 +25,14 @@ def download(url: str) -> bytes:
 
 
 def discover_worker(sources: list[str]) -> tuple[str, list[str]]:
+    # The sim worker's media path can sit in a different module than its bootstrap call, so match it anywhere.
+    # fetch() then checks the chunks themselves for exactly one sim constructor.
+    if not any("sim.worker." in source for source in sources):
+        raise RuntimeError("could not discover sim.worker bootstrap/chunks; the site's bundling changed")
     for source in sources:
         for match in WORKER.finditer(source):
-            if "sim.worker." in source[max(0, match.start() - 300):match.start()]:
-                # Turbopack's factory reverses this list for its worker bootstrap.
-                return "/_next/" + match[1], ["/_next/" + p for p in reversed(json.loads(match[2]))]
+            # Turbopack's factory reverses this list for its worker bootstrap.
+            return "/_next/" + match[1], ["/_next/" + p for p in reversed(json.loads(match[2]))]
     raise RuntimeError("could not discover sim.worker bootstrap/chunks; the site's bundling changed")
 
 

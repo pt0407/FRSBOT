@@ -19,6 +19,13 @@ def test_discover_worker_without_fixed_hashes():
             fetch.discover_worker(sources)
 
 
+def test_discover_worker_when_sim_marker_is_in_another_module():
+    bootstrap = 'e.v(e.r(10914).f("static/chunks/turbopack-worker-new.js",["static/chunks/sim-new.js"]))'
+    marker = 'e.q("/_next/static/media/sim.worker.3zxx.ts")'
+    assert fetch.discover_worker([bootstrap, marker]) == (
+        "/_next/static/chunks/turbopack-worker-new.js", ["/_next/static/chunks/sim-new.js"])
+
+
 def test_fetch_manifest_and_asset_cache(tmp_path, monkeypatch):
     wasm = '/_next/static/media/frs_match.changed.wasm'
     contents = {

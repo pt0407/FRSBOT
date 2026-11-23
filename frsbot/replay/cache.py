@@ -110,7 +110,8 @@ def load(path: Path, mmap: bool = True) -> dict:
                 start = info.header_offset + 30 + int.from_bytes(header[26:28], "little") + int.from_bytes(header[28:30], "little")
                 raw.seek(start)
                 version = np.lib.format.read_magic(raw)
-                shape, fortran, dtype = np.lib.format._read_array_header(raw, version)
+                read_header = {(1, 0): np.lib.format.read_array_header_1_0, (2, 0): np.lib.format.read_array_header_2_0}[version]
+                shape, fortran, dtype = read_header(raw)
                 offset = raw.tell()
             out[name] = np.memmap(path, dtype=dtype, mode="r", offset=offset, shape=shape, order="F" if fortran else "C")
     out["meta"] = json.loads(bytes(out["meta"]).decode())
