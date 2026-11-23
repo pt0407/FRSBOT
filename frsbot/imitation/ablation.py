@@ -11,20 +11,6 @@ from frsbot.imitation.recover import (convert, discover, load_specs, make_segmen
 from frsbot.scrape.harvest import DATA
 
 
-def _alternatives(robots, specs, rank):
-    def distance(a, b):
-        return sum(((getattr(a, key) - getattr(b, key)) / getattr(a, key)) ** 2
-                   for key in ("bumper_length", "bumper_width", "max_speed", "turn_rate", "accel"))
-
-    result = []
-    for robot in robots:
-        spec = specs[robot["team"]]
-        others = sorted((s for s in specs.values() if s.team != spec.team), key=lambda s: distance(spec, s))
-        other = others[rank]
-        result.append(dict(robot, engineTeam=other.team, speed=other.max_speed, turnRate=other.turn_rate))
-    return result
-
-
 def _jobs(replay, states, ticks, old, specs, count, rng):
     first = np.r_[True, old["segment"][1:] != old["segment"][:-1]]
     last = np.r_[first[1:], True]
@@ -36,21 +22,13 @@ def _jobs(replay, states, ticks, old, specs, count, rng):
     control = rng.choice(remaining, min(len(remaining), count), replace=False)
     buttons = transition_buttons(states, ticks, replay.events)
     fine = {ticks[w[0]]: w for w in windows(ticks, states, 2)}
-    coarse = {ticks[w[0]]: w for w in windows(ticks, states, 6)}
     for cohort, indexes in (("tail", high), ("control", control)):
         for t in starts[indexes]:
             _, baseline = make_segment(replay, states, ticks, fine[t], specs, buttons)
-            _, period = make_segment(replay, states, ticks, coarse[t], specs, buttons)
             variants = {
                 "recorded velocities / 2 ticks": baseline,
                 "zero initial velocities": dict(baseline, resetVelocity="zero"),
                 "position-derived linear velocity": dict(baseline, resetVelocity="estimate"),
-                "6 ticks": period,
-                "robot-relative": dict(baseline, robotRelative=True),
-                "hood on": dict(baseline, hood=True),
-                "stow on": dict(baseline, stow=True),
-                "neighbor spec 1": dict(baseline, robots=_alternatives(baseline["robots"], specs, 0)),
-                "neighbor spec 2": dict(baseline, robots=_alternatives(baseline["robots"], specs, 1)),
             }
             yield (cohort, int(t), variants)
 

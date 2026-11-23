@@ -8,9 +8,8 @@ class ReplayMatch {
   constructor(adapter, segment) {
     this.engine = adapter.engine;
     this.x = this.engine.exports;
-    this.segment = segment;
     const robots = segment.robots.map((r, i) => ({
-      id: r.id, team: r.engineTeam ?? r.team, alliance: r.alliance, start: r.start,
+      id: r.id, team: r.team, alliance: r.alliance, start: r.start,
       preload: 0, local: i === 0,
     }));
     const config = {
@@ -85,10 +84,9 @@ class ReplayMatch {
   }
 
   step(commands, ticks) {
-    const { robotRelative, hood, stow } = this.segment;
     const input = new Float64Array(this.x.memory.buffer, this.x.fs_input(this.p), this.robots * 11);
     commands.forEach(([x, y, turn, intake, score], i) =>
-      input.set([x, y, turn, +intake, +score, 0, 0, 0, +!!stow, +!robotRelative, +!!hood], i * 11));
+      input.set([x, y, turn, +intake, +score, 0, 0, 0, 0, 1, 0], i * 11));
     for (let k = 0; k < ticks; k++) this.check(this.x.fs_step(this.p));
   }
 
@@ -98,21 +96,17 @@ class ReplayMatch {
   }
 }
 
-function command(robot, body, from, to, dt, gain, buttons, robotRelative) {
+function command(robot, body, from, to, dt, gain, buttons) {
   // Solve around the recorded velocity first, then correct the engine's rolling pose error.
   const vx = (to.pos[0] - from.pos[0]) / dt + gain * (from.pos[0] - body.pos[0]) +
     .22 * (to.vel[0] - body.vel[0]);
   const vz = (to.pos[2] - from.pos[2]) / dt + gain * (from.pos[2] - body.pos[2]) +
     .22 * (to.vel[2] - body.vel[2]);
   const speed = Math.hypot(vx, vz);
-  const scale = speed ? stick(speed / robot.speed) / speed : 0;
-  const a = heading(body.quat);
-  const side = robot.alliance === 'blue' ? 1 : -1;
-  const x = robotRelative ? Math.sin(a) * vx - Math.cos(a) * vz : side * vz;
-  const y = robotRelative ? -Math.cos(a) * vx - Math.sin(a) * vz : side * vx;
+  const scale = speed ? (robot.alliance === 'blue' ? 1 : -1) * stick(speed / robot.speed) / speed : 0;
   const turnRate = angle(heading(to.quat), heading(from.quat)) / dt +
     gain * angle(heading(from.quat), heading(body.quat));
-  return [x * scale, y * scale, stick(-turnRate / robot.turnRate), ...buttons];
+  return [vz * scale, vx * scale, stick(-turnRate / robot.turnRate), ...buttons];
 }
 
 function fuelResidual(actual, expected) {
@@ -141,8 +135,7 @@ function rollout(adapter, segment, gain, fixed = null) {
       const a = frames[k], b = frames[k + 1];
       const ticks = b.tick - a.tick;
       const next = fixed?.[k] ?? bodies.map((body, i) =>
-        command(segment.robots[i], body, a.bodies[i], b.bodies[i], ticks / 60, gain, a.buttons[i],
-                segment.robotRelative));
+        command(segment.robots[i], body, a.bodies[i], b.bodies[i], ticks / 60, gain, a.buttons[i]));
       try {
         match.step(next, ticks);
       } catch (error) {

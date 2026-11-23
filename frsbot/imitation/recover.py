@@ -113,14 +113,13 @@ def _run(segment):
         return {"rejection": str(error)}
 
 
-def write_run(path, source, states, ticks, selections, goals, results, contacts=None, legacy=None,
-              field_relative=True):
+def write_run(path, source, states, ticks, selections, goals, results, contacts=None, legacy=None):
     start = np.array([k for segment in selections for k in segment[:-1]])
     end = np.array([k for segment in selections for k in segment[1:]])
     robot_states = [states[k].robots for k in start]
     residual = np.concatenate([r["residuals"] for r in results]).astype(np.float32)
     controls = np.concatenate([r["controls"] for r in results])
-    packets = np.array([[list(Inputs(x, y, turn, bool(intake), bool(score), field_relative=field_relative).encode())
+    packets = np.array([[list(Inputs(x, y, turn, bool(intake), bool(score), field_relative=True).encode())
                          for x, y, turn, intake, score in row] for row in controls], dtype=np.uint8)
     segment_lengths = [len(segment) - 1 for segment in selections]
     segment_id = np.repeat(np.arange(len(selections)), segment_lengths)
@@ -191,8 +190,7 @@ def recover_run(pool, path, source, destination, control_ticks, limit, legacy=No
         print(f"skipped {path.name}: all segments rejected", flush=True)
         return
     selections, goals, results, contacts = ([xs[i] for i in valid] for xs in (selections, goals, results, contacts))
-    write_run(destination, source, states, ticks, selections, goals, results, contacts, legacy,
-              field_relative=not (options or {}).get("robotRelative", False))
+    write_run(destination, source, states, ticks, selections, goals, results, contacts, legacy)
     print(f"{source} {path.name}: {len(selections)} segments, {sum(len(s) - 1 for s in selections)} frames", flush=True)
 
 
@@ -202,7 +200,7 @@ def main():
     parser.add_argument("--multiplayer", type=Path, default=DATA / "raw_mp")
     parser.add_argument("--output", type=Path, default=DATA / "imitation")
     parser.add_argument("--legacy", type=Path, help="old engine-searched archive for button agreement")
-    parser.add_argument("--robot-relative", action="store_true")
+    parser.add_argument("--initial-velocity", choices=["estimate", "recorded"], default="estimate")
     parser.add_argument("--workers", type=int, default=len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count())
     parser.add_argument("--control-ticks", type=int, default=2)
     parser.add_argument("--segments-per-replay", type=int, default=0, help="evenly spaced subset; 0 uses all segments")
@@ -221,7 +219,8 @@ def main():
         for source, path, stem in sources:
             name = f"{source}-{stem}.npz"
             recover_run(pool, path, source, args.output / name, args.control_ticks, args.segments_per_replay,
-                        args.legacy / name if args.legacy else None, dict(robotRelative=args.robot_relative))
+                        args.legacy / name if args.legacy else None,
+                        dict(resetVelocity=args.initial_velocity))
     except BaseException:
         pool.terminate()
         raise
