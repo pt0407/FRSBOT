@@ -63,12 +63,14 @@ class ReplayMatch {
       held = queues.map((_q, i) => this.inside(i));
       if (queues.every((q, i) => q.every(id => held[i].has(id)))) break;
       queues.forEach((q, i) => {
-        const { zone } = intakes[i];
+        const { sides, zone } = intakes[i];
         const [cx, , cz] = pads[i];
+        const depth = (zone.x0 + zone.x1) / 2;
         const offered = q.filter(id => !held[i].has(id)).slice(0, 3);
         offered.forEach((id, lane) => {
           this.check(this.x.fo_ball_on(this.p, id, 1));
-          this.setBall(id, 0, cx + (zone.x0 + zone.x1) / 2, .079, cz + (lane - 1) * zone.half * .65);
+          const across = (lane - 1) * zone.half * .65;
+          this.setBall(id, 0, cx + (sides ? across : depth), .079, cz + (sides ? -depth : across));
           this.setBall(id, 1, 0, 0, 0);
         });
       });
