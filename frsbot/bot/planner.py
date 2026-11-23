@@ -28,6 +28,9 @@ class Planner:
         self.spec = spec
         self.goal = None
         self.profile = profile(spec.team)
+        self.avoid_points = []
+        self.avoid_slots = []
+        self.score_offset = 0.
 
     def capacity(self, state):
         # hopperFuel/hopperCapacity are storage counts, not the UI's feed-inclusive count.
@@ -44,7 +47,7 @@ class Planner:
         cx, cz = self.hub(state)
         low, high = self.bounds()
         radius = max(low + .3, min(high - .5, (low + high) / 2))
-        heading = math.atan2(robot.z - cz, robot.x - cx) + angle_offset
+        heading = math.atan2(robot.z - cz, robot.x - cx) + angle_offset + self.score_offset
         margin = math.hypot(self.spec.bumper_length, self.spec.bumper_width) / 2 + .1
         candidates = []
         for delta in [0, *[s * i * math.pi / 36 for i in range(1, 37) for s in (-1, 1)]]:
@@ -58,6 +61,10 @@ class Planner:
                            cz + radius * math.sin(back + math.radians(deg)))
                           for deg in self.profile["score_arc_degrees"]]
         preferred = (cx + radius * math.cos(heading), cz + radius * math.sin(heading))
+        if self.avoid_slots:
+            free = [p for p in candidates if all(math.dist(p, slot) >= 1.5 for slot in self.avoid_slots)]
+            if free:
+                candidates = free
         return min(candidates, key=lambda p: math.dist(p, preferred))
 
     def fuel_points(self, state):
@@ -112,6 +119,11 @@ class Planner:
             if self.goal and self.goal.kind == "Collect" and math.hypot(x - self.goal.point[0], z - self.goal.point[1]) < .8:
                 value *= 1.25
             result.append((value, (x, z)))
+        if self.avoid_points:
+            free = [(value, point) for value, point in result
+                    if all(math.dist(point, other) >= .8 for other in self.avoid_points)]
+            if any(value >= 2 for value, _ in free):
+                result = free
         return sorted(result, reverse=True)
 
     def valid(self, goal, state):

@@ -81,3 +81,21 @@ HUB_CATCH_RESET_SECONDS = 1.5
 # hub/HP-area contact rule or shift-based opponent-zone ban was found in JS.
 GENERIC_PROTECTED_ZONE_CONTACT_RULE = None
 OPPONENT_ZONE_SHIFT_BAN = False
+
+# 2c3zgga2f0b2g.js module 2960: P (trenches), c (bumps), D (tower), w
+# (field-to-world). Rectangles are (min x, max x, min z, max z), metres.
+TRENCH_BOXES = tuple((lo, hi, zlo, zhi)
+                    for lo, hi in ((-4.2418, -3.048), (3.048, 4.2418))
+                    for zlo, zhi in ((-4.034663, -2.451227), (2.451227, 4.034663)))
+BUMP_BOXES = tuple((lo, hi, zlo, zhi)
+                  for lo, hi in ((-4.20878, -3.08102), (3.08102, 4.20878))
+                  for zlo, zhi in ((-2.451227, -.596973), (.597027, 2.451227)))
+TOWER_CENTRES = {"blue": (-7.208774, .289052), "red": (7.208774, -.289052)}
+
+# Conservative strategy margins, not additional game rules.
+PIN_RETREAT_AFTER_SECONDS = min(1., PIN_CALL_SECONDS / 3)
+CONTACT_DISTANCE_MARGIN = .1
+PIN_RETREAT_DISTANCE_MARGIN = .1
+PIN_RETREAT_TIME_MARGIN = .2
+TOWER_AVOID_DISTANCE = 1.5
+HUB_INTAKE_AVOID_DISTANCE = 1.2
