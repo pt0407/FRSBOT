@@ -75,3 +75,9 @@ Only if the gate passes: one live singleplayer run per tested team, reported as-
 to the normal planner. Six-case screens: team 2910 151.5 (baseline 516.8), team 4414 438.8 (baseline 649.5).
 Far worse on both. The simple commit rule starves the scoring cadence; the shift-aware timing in step 2 of
 the proposed design is still missing, and that is the part that would need to be tested next.
+
+## Second implementation result (shift-aware, flag off by default)
+
+`trip_shift_aware=1` limits the Collect commitment to hub-inactive time. Six-case screens: team 2910 511.3
+(baseline 516.8), team 4414 643.7 (baseline 649.5). Both slightly below baseline, so the acceptance gate
+(+40 over 530.2 on the full protocol) is not met. The commit rule alone does not raise collection volume.

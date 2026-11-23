@@ -37,7 +37,9 @@ class ImAI:
                     return self.driver.act(self.goal, state)
             self.collect_target = 0
         arrived = self.goal is not None and self.goal.kind == "Collect" and math.hypot(robot.x - self.goal.point[0], robot.z - self.goal.point[1]) < .3
-        if PARAMS["trip_sequencing"] and robot.hopper < PARAMS["trip_fill"] * self.planner.capacity(state) \
+        hub_now = state.hubs[robot.alliance]
+        collect_window = (not hub_now.active) or PARAMS["trip_shift_aware"] == 0
+        if PARAMS["trip_sequencing"] and collect_window and robot.hopper < PARAMS["trip_fill"] * self.planner.capacity(state) \
                 and state.t + self.planner.score_time(state) + 5 < 163:
             if self.goal is None or self.goal.kind != "Collect" or arrived or not self.planner.valid(self.goal, state):
                 clusters = self.planner.clusters(state)
