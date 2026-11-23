@@ -88,3 +88,9 @@ the proposed design is still missing, and that is the part that would need to be
 Full-protocol six-case screens: team 4414 `sweep_min_m=1.0` 650.2 (baseline 649.5), `sweep_scale=1.2` 664.0.
 Team 2910 `sweep_min_m=1.0` 502.0 and `sweep_scale=1.2` 501.7 (baseline 516.8). No setting clears the
 acceptance gate, so defaults stay unchanged.
+
+## Collect arrival radius (default 0.3 m, unchanged)
+
+`collect_arrive_m` sets how close the bot must get to a cluster before it re-plans. Full-protocol six-case
+screens: team 4414 0.8 m gave 633.3 and 1.5 m gave 654.7 (baseline 649.5). Team 2910 0.8 m gave 525.0 and
+1.5 m gave 507.3 (baseline 516.8). All changes are within screen noise, so the default stays at 0.3 m.
