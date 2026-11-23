@@ -35,6 +35,8 @@ class Planner:
 
     def capacity(self, state):
         # hopperFuel/hopperCapacity are storage counts, not the UI's feed-inclusive count.
+        if PARAMS["use_total_capacity"]:
+            return self.spec.total_capacity
         return state.robots[state.me].capacity or self.spec.total_capacity
 
     def bounds(self):

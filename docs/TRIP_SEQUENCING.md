@@ -137,3 +137,10 @@ majority. Closed-loop in the sim on team 2910 (6 cases): mean 11.0 vs about 517 
 The policy fails in closed loop. Small per-frame errors compound and the bot stops scoring. Not promoted.
 Next step if pursued: DAgger-style training on the bot's own visited states, labelled by the pro-recovered
 inputs, or a hybrid where the planner picks goals and the network only supplies stick corrections.
+
+## Capacity check (total vs storage hopper)
+
+The engine reports capacity 47 for team 2910, matching the spec's hopper figure. The pro's peak of 54 is
+within the 55 total capacity. `use_total_capacity=1` (planner uses the total) on the full protocol: mean
+506.5 vs 530.2 baseline (254 551.2, 2910 434.8, 1114 587.2, 4414 685.5, 60026 273.7). Worse, mainly on 2910.
+Capacity is not the cause. Default stays 0.
