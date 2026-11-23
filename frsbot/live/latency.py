@@ -21,20 +21,23 @@ class Latency:
         self.traces = []
         self.steps = []
         self.since = 0
+        self.reference_ms = None
 
     def ingest(self, packet):
         traces = packet.get("latencies", [])
         self.traces.extend(t for t in traces if t["id"] > self.since)
         if traces:
             self.since = max(self.since, max(t["id"] for t in traces))
+            if self.reference_ms is None:
+                self.reference_ms = float(np.median([t["frameAt"] - t["at"] for t in traces]))
 
     @property
     def estimate(self):
         measured = [s["ms"] for s in self.steps if s.get("ms") is not None]
-        if measured:
-            return float(np.median(measured)) / 1000
         recent = self.traces[-120:]
-        return float(np.median([t["frameAt"] - t["at"] for t in recent])) / 1000 if recent else 0
+        transport = float(np.median([t["frameAt"] - t["at"] for t in recent])) if recent else 0
+        estimate = float(np.median(measured)) + transport - (self.reference_ms or 0) if measured else transport
+        return max(0, min(1, estimate / 1000))
 
     def summary(self):
         stages = {name: distribution(t[end] - t[start] for t in self.traces)
