@@ -268,6 +268,18 @@ class Driver:
         stick = inverse_deadzone(norm)
         x = sign * stick * vz / math.hypot(vx, vz) if norm else 0
         y = sign * stick * vx / math.hypot(vx, vz) if norm else 0
+        learned = None
+        if PARAMS.get("learned_drive") and state.t >= self.unwedge_until:
+            from frsbot.bot.learned_drive import steer
+            learned = steer(state, self.spec, point, goal.kind)
+        if learned is not None:
+            lx, ly, lturn = learned
+            vx_l, vz_l = sign * ly * vmax, sign * lx * vmax
+            if robot.x * vx_l > 0 and abs(robot.x + vx_l * .3) > FIELD_X - margin:
+                ly = 0
+            if robot.z * vz_l > 0 and abs(robot.z + vz_l * .3) > FIELD_Z - margin:
+                lx = 0
+            x, y = lx, ly
         # Shooter heading: rear shooters aim away from the hub (+pi), front
         # shooters (shooterYawDeg 180) aim at it, shifted by the mount yaw.
         aim = (math.atan2(hub[1] - robot.z, hub[0] - robot.x) + math.pi - math.radians(self.spec.shooter_yaw_deg)
@@ -295,6 +307,8 @@ class Driver:
         # Engine applies a 0.45 factor to the manual turn rate — divide it out so
         # the P-gain commands the intended omega and doesn't stall ~2.2x early.
         turn = inverse_deadzone(max(-1, min(1, -4 * angle_error(aim, robot.a) / (.45 * self.spec.turn_rate))))
+        if learned is not None:
+            turn = lturn
         # While score is pressed the engine brain sets desiredRotation directly
         # and t.turn is ignored for every robot (verified: zeroing or steering
         # produced bit-identical evals) — zeroed for clarity. The heading gate
