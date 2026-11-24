@@ -21,5 +21,6 @@ DEFAULTS = dict(collect_frac=0.3, collect_min=10.0, replan_s=0.5, avoid_slot_m=1
                 mow_cone_min=99, mow_speed_frac=0.35, approach_fire=1,
                 pre_fire_s=2.0, post_fire_s=0.35,
                 pile_exit=8,
-                score_floor=10, learned_drive=0)
+                score_floor=10, learned_drive=0, learned_terminal_m=1.5,
+                learned_blend=.6, learned_turn_blend=None)
 PARAMS = {**DEFAULTS, **json.loads(os.environ.get("IMAI_PARAMS", "{}"))}
