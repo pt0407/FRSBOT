@@ -85,7 +85,20 @@ locally. `fetch_mp` downloads those releases. Only `rankedLive`/`rankedWatch` ar
 ## Current status: live singleplayer score
 
 - Best live singleplayer runs: 626 (team 254) and 608 (team 4414) with `run_imai.command`. Target 1200 is not reached.
-- Offline 30-case baseline on this machine: 530.2 mean. Team means: 254 600, 1114 611, 2910 517, 4414 650, 60026 273.
+- Offline 30-case eval (feat/trip-sequencing @ 1cff8e5): 574.4 mean. Team means:
+  254 727, 1114 641, 2910 505.5, 4414 745.5, 60026 260. Focused extras: 2481 ~638, 1678 ~327.
+- Engine facts verified this session: `t.turn` is ignored for every robot while
+  `score` is pressed — the brain sets `desiredRotation` directly (bit-identical A/B);
+  heading/hood/flywheel gate-blocked ticks are mostly cosmetic since `firing` latches
+  on the first static aligned tick and persists through translation (254 drops
+  observed at 0.9 m/s); `xLock` robots like 254 are pinned while latched, others
+  (1678) creep at ~1 m/s with intermittent gate. Pressing score during an INACTIVE
+  hub dumps the hopper (shots don't count) — never do it.
+- Measured dead ends (kept OFF): all banking variants (−150 to −230: parked Feed,
+  seed pile, mow-feed — pile re-collection is rate-capped below field mowing);
+  close score spots r≈2.0/2.4 (−90 to −230 vs r≈3.5); latched ejecta-creep
+  (−63 to −163: nearest-ball chasing breaks the latch); active_hub_bias 0.8
+  (−73 on 254).
 - Every tuning knob in `frsbot/bot/tuning.py` defaults to the shipped value. Sweeps on the 6-case
   screens (team 4414 and 2910) and the full protocol did not beat baseline by a meaningful margin:
   stage fullness, arrival margin, intake gate, scoring trigger, cluster bias, and the learned hint.
