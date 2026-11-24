@@ -268,6 +268,7 @@ class Driver:
         stick = inverse_deadzone(norm)
         x = sign * stick * vz / math.hypot(vx, vz) if norm else 0
         y = sign * stick * vx / math.hypot(vx, vz) if norm else 0
+        self.last_steer = dict(point=point, kind=goal.kind, rule=(x, y))
         learned = None
         terminal = goal.kind != "Collect" and distance < PARAMS.get("learned_terminal_m", 1.5)
         if PARAMS.get("learned_drive") and state.t >= self.unwedge_until and not terminal:
@@ -309,6 +310,7 @@ class Driver:
         # Engine applies a 0.45 factor to the manual turn rate — divide it out so
         # the P-gain commands the intended omega and doesn't stall ~2.2x early.
         turn = inverse_deadzone(max(-1, min(1, -4 * angle_error(aim, robot.a) / (.45 * self.spec.turn_rate))))
+        self.last_steer["turn"] = turn
         if learned is not None:
             tb = PARAMS.get("learned_turn_blend")
             tb = blend if tb is None else tb

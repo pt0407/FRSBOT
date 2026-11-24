@@ -76,9 +76,15 @@ def main():
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--output", type=Path, default=MODEL)
     args = parser.parse_args()
-    files = sorted(glob.glob(str(ROOT / "data" / "imitation" / "*.npz")))
+    files = sorted(f for f in glob.glob(str(ROOT / "data" / "imitation" / "solo-*.npz")))
+    dagger = sorted(glob.glob(str(ROOT / "data" / "imitation" / "dagger-*.npz")))
     train, held = files[:-args.holdout], files[-args.holdout:]
     Xt, Yt, Wt, _ = load(train)
+    for f in dagger:
+        d = np.load(f)
+        Xt = np.vstack([Xt, d["X"]])
+        Yt = np.vstack([Yt, d["Y"]])
+        Wt = np.concatenate([Wt, d["W"]])
     Xh, Yh, Wh, rh = load(held)
     net = fit(Xt, Yt, Wt, args.epochs)
     with torch.no_grad():
