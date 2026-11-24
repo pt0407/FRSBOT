@@ -46,6 +46,7 @@ class Driver:
             "shoot_while_collecting", (self.spec.max_shot_speed or 0) >= 2)
         self.reaim_until = 0
         self.stall_t = None
+        self.pin_t = None
         self.unwedge_until = 0
 
     def progress(self, goal, state):
@@ -240,6 +241,18 @@ class Driver:
                     self.stall_t = None
             else:
                 self.stall_t = None
+        # Physically pinned with a distant target and no escape: the speed gate
+        # above misses it whenever the commanded speed is already low/zero
+        # (1678 pinned on the tower face for 25 s during Collect). Score has
+        # its own progress() recovery and legitimately sits at v~0 on the spot.
+        if goal.kind != "Score" and distance > .5 and actual_v < .15:
+            if self.pin_t is None:
+                self.pin_t = state.t
+            elif state.t - self.pin_t > 1.5:
+                self.unwedge_until = state.t + .9
+                self.pin_t = None
+        else:
+            self.pin_t = None
         if state.t < self.unwedge_until:
             direction = math.atan2(-dz, -dx)
             speed = .9
@@ -282,9 +295,11 @@ class Driver:
         # Engine applies a 0.45 factor to the manual turn rate — divide it out so
         # the P-gain commands the intended omega and doesn't stall ~2.2x early.
         turn = inverse_deadzone(max(-1, min(1, -4 * angle_error(aim, robot.a) / (.45 * self.spec.turn_rate))))
-        # The engine owns yaw while a shot/pass is commanded (aim assist) — except
-        # turret robots during Collect, where the turret aims and the chassis
-        # keeps steering for the intake line.
+        # While score is pressed the engine brain sets desiredRotation directly
+        # and t.turn is ignored for every robot (verified: zeroing or steering
+        # produced bit-identical evals) — zeroed for clarity. The heading gate
+        # counts those dead-steer ticks but 'firing' latches on the first static
+        # aligned tick, so they are mostly cosmetic, not lost shots.
         steers_free = self.spec.turret and goal.kind == "Collect"
         if score and not self.recovering and not steers_free:
             turn = 0

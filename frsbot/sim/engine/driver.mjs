@@ -169,7 +169,7 @@ export class Driver {
     this.recovering = false; this.crossing = null; this.progressAt = null; this.openSince = null;
     this.previousHopper = null; this.recoveryStage = 0; this.recoveryPoint = null; this.wiggleUntil = 0;
     this.abandon = false; this.shootWhileCollecting = profile.shoot_while_collecting ?? ((spec.max_shot_speed || 0) >= 2); this.reaimUntil = 0;
-    this.stallT = null; this.unwedgeUntil = 0;
+    this.stallT = null; this.pinT = null; this.unwedgeUntil = 0;
   }
 
   progress(goal, state) {
@@ -345,6 +345,15 @@ export class Driver {
         }
       } else this.stallT = null;
     }
+    // Mirrors driver.py: pinned with a distant target and low/zero commanded
+    // speed — the gate above misses it (Score handles wedges via progress()).
+    if (goal.kind !== 'Score' && distance > .5 && v < .15) {
+      if (this.pinT === null) this.pinT = state.t;
+      else if (state.t - this.pinT > 1.5) {
+        this.unwedgeUntil = state.t + .9;
+        this.pinT = null;
+      }
+    } else this.pinT = null;
     let vx, vz;
     if (state.t < this.unwedgeUntil) {
       direction = Math.atan2(-dz, -dx);
@@ -385,8 +394,9 @@ export class Driver {
         score = score || distance < 1.6 || v <= scoreSpeed;
     }
     let turn = inverseDeadzone(Math.max(-1, Math.min(1, -4 * angleError(aim, robot.a) / (.45 * spec.turn_rate))));
-    // The engine owns yaw while a shot/pass is commanded (aim assist) — except
-    // turret robots during Collect, where the chassis keeps steering the intake.
+    // Mirrors driver.py: while score is pressed the engine brain sets
+    // desiredRotation and t.turn is ignored — zeroed for clarity. Turret robots
+    // keep chassis steering during Collect (SCORING_ON_THE_MOVE reads omega).
     const steersFree = spec.turret && goal.kind === 'Collect';
     if (score && !this.recovering && !steersFree) turn = 0;
     if (PARAMS.approachFire && !speedGated && shooting && ownSide && low <= distanceHub && distanceHub <= high && v <= scoreSpeed) turn = 0;

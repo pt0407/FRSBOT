@@ -42,6 +42,8 @@ class Planner:
         self.collect_prev_hopper = 0
         self.collect_dead = []
         self._collect_point = None
+        self._starve_t = 0.
+        self._starve_prev = 0
 
     def capacity(self, state):
         # hopperFuel/hopperCapacity are storage counts, not the UI's feed-inclusive count.
@@ -226,8 +228,16 @@ class Planner:
         else:
             self._collect_point = None
         self.collect_prev_hopper = robot.hopper
+        if robot.hopper > self._starve_prev:
+            self._starve_t = state.t
+        self._starve_prev = robot.hopper
+        # Diminishing returns: with the hub open, a hopper that stopped growing
+        # for ~6 s is worth more shot now than chased to full (1678 ground 45 s
+        # for ~10 balls instead of scoring 55).
+        starved = state.t - self._starve_t > 6.0
         if hub.active and robot.hopper and (state.t < PARAMS["early_score_until"] or hub.seconds_to_toggle <= score_time + 1 or
-                robot.hopper >= PARAMS["active_score_frac"] * self.capacity(state) or not clusters or clusters[0][0] < 2):
+                robot.hopper >= PARAMS["active_score_frac"] * self.capacity(state) or not clusters or clusters[0][0] < 2
+                or (starved and robot.hopper >= .45 * self.capacity(state))):
             goal = Goal("Score", spot)
         elif not hub.active and robot.hopper and (robot.hopper >= PARAMS["stage_full_frac"] * self.capacity(state) or hub.seconds_to_toggle < score_time + PARAMS["arrive_margin_s"]):
             goal = Goal("Stage", spot)
