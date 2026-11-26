@@ -179,3 +179,23 @@ FINDINGS:
 CONCLUSION: the architecture rebuild is continuous lane sweeping during collection —
 no arrival, no parking at piles — plus pass-cycling in opponent windows. This is
 now measured fact, not hypothesis.
+
+## The reversal mechanism — why no-stop didn't work (2026-11-25 late)
+
+No-stop-at-piles experiment: move% barely moved (shift 42%→50%), scores noise-level.
+ROOT CAUSE: the driver aims AT points; after passing through a pile the planner's
+next target is often BEHIND the robot — a 180-degree velocity reversal. Reversing
+direction physically requires decelerating to zero and re-accelerating, so the
+stop-go pattern survives any speed law. THE FIX MUST BE PLANNER-LEVEL: chain
+collect targets along forward lanes (directional commitment), i.e. lane sweeping
+as the primary collection primitive. lane_bias=1.0 soft bias insufficient.
+ARCHITECTURE SPEC (next session, highest priority):
+1. Planner emits lane segments: entry point + direction + length along density
+   ridges, not cluster centroids. Chain lanes forward — next lane's entry must be
+   within ~90 deg of current travel direction, else extend current lane or turn
+   to a hub trip.
+2. Driver lane mode: hold lane direction at cruise, intake on, no arrival braking;
+   lane ends => planner chains next forward lane.
+3. Opponent-window rhythm: pass excess (keep reserve for window-open dump — see
+   passing v1 failure), end window full and near hub.
+4. Validate with move% (target 75%+ in collect windows) AND score.

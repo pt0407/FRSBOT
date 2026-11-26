@@ -237,7 +237,10 @@ class Driver:
             speed = vmax * PARAMS["collect_cruise_frac"]
         if arriving and final_waypoint:
             speed = 0
-            if goal.kind == "Collect" and path_fuel:
+            if goal.kind == "Collect":
+                # NEVER park at piles: intake is rate-capped so a stationary robot
+                # starves after depleting mouth-range fuel. Hold cruise through the
+                # arrival; the planner chains the next target (pro move% 73-90).
                 speed = vmax * PARAMS["collect_cruise_frac"]
         elif arriving:
             speed = max(speed, .35)

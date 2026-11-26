@@ -329,7 +329,7 @@ export class Driver {
     }
     if (arriving && finalWaypoint) {
       speed = 0;
-      if (collectKind && pathFuel) speed = vmax * PARAMS.collectCruiseFrac;
+      if (collectKind) speed = vmax * PARAMS.collectCruiseFrac;  // never park at piles (parity)
     } else if (arriving) speed = Math.max(speed, .35);
     const scoreSpeed = spec.max_shot_speed || (spec.brain_equivalents?.scoreSpeedTol ?? .15);
     if (movingShot) speed = Math.min(speed, Math.min(scoreSpeed, spec.max_shot_speed * .6));
