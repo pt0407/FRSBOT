@@ -287,7 +287,24 @@ class Planner:
         # for ~6 s is worth more shot now than chased to full (1678 ground 45 s
         # for ~10 balls instead of scoring 55).
         starved = state.t - self._starve_t > 6.0
-        if hub.active and robot.hopper and (state.t < PARAMS["early_score_until"] or hub.seconds_to_toggle <= score_time + 1 or
+        # Fire-sweep: intake rates run 2-4x fire rates, so firing is the scarce
+        # resource, not collection. For moving-shot robots the correct active-
+        # window behavior is continuous fire while sweeping fuel inside range —
+        # never discrete collect-then-park trips. The driver's moving_shot
+        # presses score whenever in range, so the planner just has to keep the
+        # robot sweeping lanes inside the fire annulus.
+        fire_swept = False
+        if (PARAMS["fire_sweep"] and hub.active and robot.hopper and clusters
+                and (self.spec.max_shot_speed or 0) >= 2 and robot.hopper < .9 * self.capacity(state)):
+            hxz = self.hub(state)
+            ring = [c for c in clusters
+                    if low + .2 <= math.hypot(c[1][0] - hxz[0], c[1][1] - hxz[1]) <= high - .4]
+            if ring:
+                goal = self.sweep_goal(state, ring[0][1])
+                fire_swept = True
+        if fire_swept:
+            pass
+        elif hub.active and robot.hopper and (state.t < PARAMS["early_score_until"] or hub.seconds_to_toggle <= score_time + 1 or
                 robot.hopper >= PARAMS["active_score_frac"] * self.capacity(state) or not clusters or clusters[0][0] < 2
                 or (starved and robot.hopper >= .45 * self.capacity(state))):
             goal = Goal("Score", spot)

@@ -236,3 +236,29 @@ Measured chain (all verified this session):
   opponent windows midfield |x|2-4 (passes). Passes land own-half x in [-3.5,-1], 1.5-2.75m upfield.
 - Winner-vs-loser aggregate stats flat (cruise/positioning identical) — difference is
   phase-dependent timing, per-window analysis still incomplete.
+
+## FIRE TIME is the gap — corrected analysis + fire_sweep validated (2026-11-26)
+
+CORRECTION to yesterday's fire-rate note: pro drain-rate measurement had selection bias
+(30Hz sampling, only positive-drain ticks counted). Real accounting at fireRate caps
+(robot_feel.json: 4414=14, 254=26, 1678=24, 2910=32): both pro and bot fire AT CAP when
+firing. Pro 4414 drains 1242 total = 88s at cap (53% of match). Bot drains ~700 = 50s (30%).
+THE GAP IS TIME SPENT FIRING, not rate. Pros press score 55% of all ticks (147k samples).
+- intakeRate >> fireRate for every robot (4414: 50 vs 14). Firing is the scarce resource.
+  Collection of a full hopper takes ~2.3s of dense sweeping; dumping takes 8.2s.
+- Hub centers at x=+/-3.645 — barely past midfield (field +/-8.27). Midfield fuel is often
+  INSIDE the fire annulus [1.3, 5.6]. The pro's "deep" position |x|6.7-7.3 in own windows is
+  3-3.6m past/behind the hub — still in annulus, near HP-throw landing zones (unverified).
+- fire_sweep=1 implemented+validated: moving-shot robots (maxShotSpeed>=2) sweep in-annulus
+  lanes during active windows instead of pure park trips. 4414 seeds1-2: 706.8 mean vs 690.2
+  baseline, best 767 (new eval high). DEFAULT ON. BUT fire time barely moved (50-51s vs 49) —
+  the ring is often empty because collect trips range field-wide; positioning is the next lever.
+- drain-while-moving only 30-50 of 700 balls — moving shot barely engages. Needs: lanes
+  constrained to annulus during active windows as PRIMARY behavior, not fallback.
+- NEXT LEVERS in order: (1) active-window positioning: stay in annulus entire window, venture
+  out only when ring empty and hopper low; (2) HP-throw landing zones — decode where hp fuel
+  enters and pre-position (pro |x|7 suggests end-zone intercepts); (3) Stage time 38-46s is
+  still dead — passing too restrictive (requires distance>high+.5 AND hopper>0.7cap — rarely
+  both). Pro passes continuously at ANY hopper level from midfield. Loosen: pass whenever
+  inactive+hopper>~30%+in pass range. (4) xLock robots (254) can't fire moving: they need
+  park spots with fuel in intake range — choose score spot near density.
