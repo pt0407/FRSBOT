@@ -37,7 +37,7 @@ def convert(rep: Replay, specs: list[RobotSpec] | None = None) -> list[GameState
                 x=raw[o] * POS_SCALE, z=raw[o + 2] * POS_SCALE,
                 a=math.pi - 2 * math.atan2(raw[o + 4], raw[o + 6]),
                 vx=raw[o + 7] * VEL_SCALE, vz=raw[o + 9] * VEL_SCALE,
-                hopper=raw[o + 13], capacity=by_team[robot["team"]].hopper_capacity,
+                hopper=raw[o + 13], capacity=(by_team[robot["team"]].hopper_capacity if robot["team"] in by_team else 80),
                 gate=None, mode=None,
             ))
         states.append(GameState(
