@@ -122,3 +122,22 @@ locally. `fetch_mp` downloads those releases. Only `rankedLive`/`rankedWatch` ar
   on 6 cores). Reward = ego score delta per control step; noise on x/y with blend-aware exact credit
   assignment; turn stays rule. Saves to `data/models/drive_policy.pt` every `--save-every` iterations and on
   new best mean. Reproduce evals with `IMAI_PARAMS='{"learned_drive":1,"learned_blend":0.6,"learned_turn_blend":0}'`.
+
+## Human movement law + evolution (2026-11-25)
+
+- Driver collect law is now the human-measured behavior: flat cruise at
+  `collect_cruise_frac*vmax` (default 0.68), no distance braking, no cosine
+  heading throttle. Extracted from 136k recovered pro frames (`/tmp/extract_human.py`
+  pattern): pros sustain 2.6-3.1 m/s through every collect bin, brake only into the
+  hub, leave for the hub at hopper fraction ~0.88 (vs our default collect_frac 0.3).
+- Robots are confirmed holonomic (swerve): full 4.4 m/s perpendicular to chassis.
+- CMA-ES evolution harness: `python -m frsbot.tools.evolve_params` — 18 genes,
+  popsize 12, teams 254/4414/1678, crash-proofed (fitness 0 for crashed candidates,
+  planner score-spot fallback). Best params checkpoint to `data/rl/evolved_params.json`.
+  ~10 min/generation; running overnight in `data/rl/evolve_run2.log`.
+- Dead ends confirmed this session (all measured regressions): pure BC closed-loop,
+  BC+rule blends (neutral at best), PPO sparse-reward at small scale, transit-mow
+  bending, drive-through targets, mow sweep, free_fire, pass-through alone.
+- Learned-drive infrastructure exists but is gated off (`learned_drive`): see
+  `frsbot/bot/learned_drive.py`, `frsbot/imitation/train_drive.py` — BC ceiling problem
+  documented in git history.
