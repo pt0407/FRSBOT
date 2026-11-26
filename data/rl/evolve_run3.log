@@ -9,3 +9,9 @@ gen 3: best 576 mean 491 ever 585 sigma 0.167 elapsed 7m
 gen 4: best 602 mean 550 ever 602 sigma 0.159 elapsed 10m
 gen 5: best 603 mean 485 ever 603 sigma 0.157 elapsed 12m
 gen 6: best 570 mean 533 ever 603 sigma 0.155 elapsed 15m
+gen 7: best 583 mean 531 ever 603 sigma 0.155 elapsed 18m
+gen 8: best 567 mean 517 ever 603 sigma 0.163 elapsed 22m
+gen 9: best 568 mean 520 ever 603 sigma 0.171 elapsed 25m
+gen 10: best 605 mean 510 ever 605 sigma 0.178 elapsed 28m
+gen 11: best 591 mean 516 ever 605 sigma 0.183 elapsed 35m
+gen 12: best 582 mean 538 ever 605 sigma 0.189 elapsed 40m

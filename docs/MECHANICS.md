@@ -96,3 +96,23 @@ gen 5 best 614 ≈ baseline; runs in `data/rl/evolve_run2.log`, checkpoints in
    (waste) — if so, aim position matters, face away from hub.
 3. Then: departure timing should shift — collect pass cycles during opponent shift,
    arrive at window open with hopper full AND field pre-positioned.
+
+## Ranked multiplayer mining — first stats (10 matches, 2026-11-25)
+
+- Fire position |x| mean 4.99 (close to hub) — humans fire near-stationary:
+  only 11% of firing bursts happen while moving >0.5 m/s. Park-and-dump is
+  how even good humans score; the differentiator is collection speed/routing.
+- Pro speed when moving in ranked: p50 2.51, p90 4.02 m/s — consistent with
+  the solo-derived movement law.
+
+## Passing v1: measured REGRESSION (2026-11-25)
+
+pass_frac 0.7 overlay eval vs same-code-no-passing: 4414 690 vs 710 (−21),
+1678 283 vs 309 (−26), 254 flat. Hypothesis: emptying the hopper during the
+inactive window means the active window opens with nothing to dump — losing
+the guaranteed full-hopper first dump beats the pre-positioning gain.
+REFINEMENT NEEDED: pass only down to a reserve (e.g. stop passing at 40-50%
+so window-open still has a partial dump), or only pass excess collected in
+the final seconds, or verify landing zones aren't wasteful first. ALSO:
+hopper-full timing — should arrive at window open FULL, pass only early-window
+excess. v1 kept in code but needs retune before adoption.
