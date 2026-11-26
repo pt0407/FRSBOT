@@ -9,20 +9,24 @@ ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "data" / "models" / "drive_policy.pt"
 KINDS = ("Collect", "Score", "Stage")
 _net = None
+_mtime = 0.
 
 
 def _load():
-    global _net
-    if _net is None and MODEL.exists():
+    global _net, _mtime
+    if MODEL.exists():
         try:
-            import torch
-            from torch import nn
-            net = nn.Sequential(nn.Linear(20, 128), nn.ReLU(), nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 3))
-            net.load_state_dict(torch.load(MODEL, map_location="cpu", weights_only=True))
-            net.eval()
-            _net = net
+            mtime = MODEL.stat().st_mtime
+            if _net is None or mtime != _mtime:
+                import torch
+                from torch import nn
+                net = nn.Sequential(nn.Linear(20, 128), nn.ReLU(), nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 3))
+                net.load_state_dict(torch.load(MODEL, map_location="cpu", weights_only=True))
+                net.eval()
+                _net, _mtime = net, mtime
         except Exception:
-            _net = False
+            if _net is None:
+                _net = False
     return _net or None
 
 

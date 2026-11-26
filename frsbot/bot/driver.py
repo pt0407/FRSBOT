@@ -268,12 +268,13 @@ class Driver:
         stick = inverse_deadzone(norm)
         x = sign * stick * vz / math.hypot(vx, vz) if norm else 0
         y = sign * stick * vx / math.hypot(vx, vz) if norm else 0
-        self.last_steer = dict(point=point, kind=goal.kind, rule=(x, y))
+        self.last_steer = dict(point=point, kind=goal.kind, rule=(x, y), learned=False)
         learned = None
         terminal = goal.kind != "Collect" and distance < PARAMS.get("learned_terminal_m", 1.5)
         if PARAMS.get("learned_drive") and state.t >= self.unwedge_until and not terminal:
             from frsbot.bot.learned_drive import steer
             learned = steer(state, self.spec, point, goal.kind)
+        self.last_steer["learned"] = learned is not None
         if learned is not None:
             lx, ly, lturn = learned
             vx_l, vz_l = sign * ly * vmax, sign * lx * vmax
