@@ -262,3 +262,16 @@ THE GAP IS TIME SPENT FIRING, not rate. Pros press score 55% of all ticks (147k 
   both). Pro passes continuously at ANY hopper level from midfield. Loosen: pass whenever
   inactive+hopper>~30%+in pass range. (4) xLock robots (254) can't fire moving: they need
   park spots with fuel in intake range — choose score spot near density.
+
+## Scoring-zone geometry + deep-zone fuel scarcity (2026-11-26, negative result)
+- SCORING_X=4.3: shots only count when fired from own zone |x|>4.2418. Hub at x+/-3.645 sits
+  just OUTSIDE the zone line — so the firing position is the deep strip x in [4.3, 8.27]
+  past the hub, firing BACK at it. Pro |x|6.7-7.3 in own windows confirmed consistent.
+- moving_shot requires own_side, so during Collect the combined inrange+ownside+hopper
+  condition held only 9% of collect time in the loose fire_sweep eval.
+- TESTED: constraining fire-sweep ring to own-zone clusters REGRESSED hard (599 vs 706):
+  deep-zone fuel is too scarce in solo — robot grinds 78-83s in Collect with hood/heading
+  blocked ticks exploding (324-498). The pro's deep-zone fuel supply must come from HP
+  throws and/or teammate passing — not replicated in solo bot play. loose ring stays default.
+- OPEN: verify where HP throws land (decode fuel spawn positions by where-code over time).
+  If they land deep, positioning to intercept could unlock the deep-zone strategy properly.
