@@ -106,3 +106,19 @@ locally. `fetch_mp` downloads those releases. Only `rankedLive`/`rankedWatch` ar
   1390 FUEL in a match on the same family; the bot collects about 600. Shooter fire rate caps 4414 at 14.
 - The learned event model (`frsbot/imitation/pro_planner.py`) predicts the next second well on held-out
   replays (80% event accuracy, 0.62 m pose error), but overriding goals with it lowered scores.
+
+## Learned drive layer and RL fine-tuning (Nov 2026)
+
+- `frsbot/imitation/train_drive.py`: goal-conditioned BC on recovered pro inputs (`data/imitation/solo-*.npz`,
+  re-recovered at `--control-ticks 1`, ~136k frames). Features: 14 base + bearing cos/sin + goal distance +
+  goal-kind one-hot (20 total). Writes `data/models/drive_policy.pt` (gitignored).
+- `frsbot/bot/learned_drive.py`: lazy torch runtime, reloads weights when the file mtime changes.
+- `driver.py` hook (gated `learned_drive`, default 0): sticks become `blend*net + (1-blend)*rule` on x/y,
+  independent `learned_turn_blend`; rule keeps terminals (`learned_terminal_m`), buttons, wall clamp, unwedge.
+- Pure learned sticks collapse closed-loop (open-loop drift); blending is required. Rule servo + human shape.
+- `frsbot/imitation/dagger_rollout.py`: labels net-visited states with the rule expert; merged by train_drive.
+  DAgger ceiling is the rule driver itself.
+- `frsbot/imitation/train_rl.py`: PPO fine-tune in `VecWasmEnv` (~140x aggregate realtime, ~70 iterations/hour
+  on 6 cores). Reward = ego score delta per control step; noise on x/y with blend-aware exact credit
+  assignment; turn stays rule. Saves to `data/models/drive_policy.pt` every `--save-every` iterations and on
+  new best mean. Reproduce evals with `IMAI_PARAMS='{"learned_drive":1,"learned_blend":0.6,"learned_turn_blend":0}'`.
