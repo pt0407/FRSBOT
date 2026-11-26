@@ -65,3 +65,34 @@ gen 5 best 614 ≈ baseline; runs in `data/rl/evolve_run2.log`, checkpoints in
 - NOT yet modeled: fullness-dependent fit (hopper expansion blocks trench when
   full, per the driver). Pathing is currently binary per robot, load-blind.
 - driver.mjs already mirrors the trench-post obstacle logic.
+
+## PASSING — the core inactive-window strategy (2026-11-25, driver-reported + verified)
+
+- Every robot brain has a `passShot` table (hoodDeg ~45 high arc, distances to
+  12.4 m, rpm/deg/tof per distance) distinct from `hubShot`. Brain states include
+  PASS and PASSING_MANUAL_SHOT; `isReadyToPass` is part of the same gate logic
+  as scoring — **pressing `score` while out of hub range makes the brain pass
+  automatically** (probe: 4414 at (-4.8,3.5) fired balls that landed ~4m upfield
+  in a consistent zone x -1..-2.9 z~0, toward own side).
+- Pro strategy (from the driver, visible in records): during the OPPONENT's shift
+  (hub inactive), don't park with a full hopper — PASS fuel toward your own side,
+  emptying the hopper so collection never stops during the 25 s dead window, and
+  pre-positioning fuel near your scoring side for short cycles when your window opens.
+- Current bot behavior is the wrong one: trip sequencing fills the hopper during
+  inactive windows then Stage-parks frozen for 10-25 s (observed in traces at
+  x ±5.5 z ±2.6 — those "stuck" episodes are partly staging waits, NOT wedges).
+- The engine has `outposts` — HP feeding stations; passes may target/involve them.
+  VERIFY: where exactly pro passes land (mine solo-*.npz: hopper drops during
+  inactive windows + fuel where==1 trajectories), whether passing into the inactive
+  hub region wastes balls, and whether pass landing zones depend on robot position.
+- Movement is STILL too slow per the driver — after passing is in, re-examine.
+
+## Implementation spec (next session)
+
+1. In `imai.py` inactive-window branch: when hopper >= ~0.7*capacity, emit a Pass
+   behavior — press score while positioned in own half/midfield (out of hub range),
+   until hopper low, then resume collecting. Brain handles arc/landing automatically.
+2. Eval on 4414/254/1678 vs current. Watch for: passes landing in inactive hub
+   (waste) — if so, aim position matters, face away from hub.
+3. Then: departure timing should shift — collect pass cycles during opponent shift,
+   arrive at window open with hopper full AND field pre-positioned.
