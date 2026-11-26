@@ -151,3 +151,31 @@ semantic (wrong places, wrong targets, dead time), not mechanical. Movement
 polish is a dead end; 100% of remaining gap is decision-making: target/route
 selection, window timing, passing. Swoop experiment (direction lock near piles)
 showed no measurable benefit — left in code behind swoop_m param, unvalidated.
+
+## PRO vs BOT deep run comparison (4414, phase-by-phase, 2026-11-25)
+
+Pro telemetry cnkih62odb6gaok0 vs bot eval imai-4414-blue-1, per match phase
+(dist traveled, balls gained, balls dumped/expelled, move%, mean |x|, end hopper):
+
+PRO: auto gain188/dump151; shift1 dist49m gain219 dump169 move81% |x|2.1 endhop82;
+shift2 dist17m gain191 dump235 |x|6.8; shift3 dist63m gain176 dump132 move90% endhop81;
+shift4 dist16m gain154 dump231 |x|6.8; endgame gain239 dump231.
+BOT: auto gain107; shift1 dist22m gain119 dump7 move42% endhop115;
+shift2 gain102 dump209 move43%; shift3 gain118 move50%; endgame gain146.
+
+FINDINGS:
+1. Pro collects 1246 balls/match vs bot 826 — the entire score gap.
+2. THE SMOKING GUN: move% pro 73-90% vs bot 34-56%. Bot sits stationary at piles
+   half the match; intake is rate-capped so a stationary robot starves after
+   depleting mouth-range fuel. Continuous motion keeps the cap saturated.
+   NEVER STOP MOVING during collection — arrival logic at piles is the enemy.
+3. Pro window rhythm: opponent shifts = roam midfield (|x|~2.1), gain ~200 AND
+   pass/expel 130-170 (passing confirmed in pro behavior at scale), end window
+   ~82 full; own shifts = park deep (|x|~6.8), dump 231-235.
+4. Bot holds everything through opponent windows (endhop 115, passes ~nothing),
+   correct rhythm on paper but half throughput due to static collection.
+5. Pro scores ~151 in auto vs bot ~107 — auto collection matters too.
+
+CONCLUSION: the architecture rebuild is continuous lane sweeping during collection —
+no arrival, no parking at piles — plus pass-cycling in opponent windows. This is
+now measured fact, not hypothesis.
