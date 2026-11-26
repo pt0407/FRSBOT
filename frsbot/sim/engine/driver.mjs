@@ -55,7 +55,7 @@ export function viewToState(view, freeplay = false, me = null) {
 
 // Shipped tuning defaults used by Driver (frsbot/bot/tuning.py DEFAULTS subset).
 const PARAMS = { driveDistGain: 2.0, driveBrakeFrac: .4,
-  collectNearFrac: .6, collectCosFloor: .05, mowConeMin: 99,
+  collectNearFrac: .6, collectCosFloor: .05, mowConeMin: 99, collectCruiseFrac: .68,
   mowSpeedFrac: .35, intakeNeedsFuel: 0, approachFire: 1, freeFire: 0, freeFireSpeed: .8,
   preFireS: 2.0, postFireS: .35, scoreRadiusFrac: .5 };
 
@@ -323,13 +323,13 @@ export class Driver {
     let speed = Math.min(vmax, PARAMS.driveDistGain * brakeDist,
       Math.sqrt(2 * spec.accel * PARAMS.driveBrakeFrac * Math.max(0, brakeDist - .12)));
     if (collectKind) {
-      if (distance < 1) speed = Math.min(speed, vmax * PARAMS.collectNearFrac);
-      else if (mowDir !== null) speed = Math.min(speed, vmax * PARAMS.mowSpeedFrac);
-      speed *= Math.max(PARAMS.collectCosFloor, Math.cos(angleError(direction, robot.a)));
+      // Human-measured law: pros never brake for collect points and never
+      // throttle for heading error — flat cruise pass-through (parity with driver.py).
+      speed = vmax * PARAMS.collectCruiseFrac;
     }
     if (arriving && finalWaypoint) {
       speed = 0;
-      if (collectKind && pathFuel) speed = .6;
+      if (collectKind && pathFuel) speed = vmax * PARAMS.collectCruiseFrac;
     } else if (arriving) speed = Math.max(speed, .35);
     const scoreSpeed = spec.max_shot_speed || (spec.brain_equivalents?.scoreSpeedTol ?? .15);
     if (movingShot) speed = Math.min(speed, Math.min(scoreSpeed, spec.max_shot_speed * .6));

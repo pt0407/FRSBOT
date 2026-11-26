@@ -149,6 +149,15 @@ class Planner:
         balls = (np.sum((centres[:, None, :] - points[None, :, :]) ** 2, axis=2) <= sweep ** 2).sum(axis=1)
         dx, dz = centres[:, 0] - robot.x, centres[:, 1] - robot.z
         travel = np.hypot(dx, dz) / self.spec.max_speed
+        # Momentum lane bias: reversing direction costs a full stop plus
+        # re-acceleration and, unlike the point-to-point model assumes, the
+        # capture rate scales with speed while the intake is in dense fuel.
+        # Penalise clusters behind the velocity vector so lanes chain forward.
+        speed = math.hypot(robot.vx, robot.vz)
+        if speed > .8:
+            dist = np.hypot(dx, dz) + 1e-6
+            align = (dx * robot.vx + dz * robot.vz) / (dist * speed)
+            travel = travel * (1 + PARAMS["lane_bias"] * (1 - align))
         turn = np.abs((np.arctan2(dz, dx) - robot.a + np.pi) % (2 * np.pi) - np.pi) / self.spec.turn_rate
         values = balls / (travel + turn + PARAMS["cluster_bias"])
         own = self.score_spot(state)

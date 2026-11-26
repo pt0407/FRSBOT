@@ -3,3 +3,8 @@
 (6_w,12)-aCMA-ES (mu_w=3.7,w_1=40%) in dimension 18 (seed=697387, Wed Nov 25 19:48:58 2026)
 CMA-ES: 18 genes, popsize 12, teams [254, 4414, 1678]
 9 parallel slots
+gen 1: best 579 mean 464 ever 579 sigma 0.190 elapsed 5m
+gen 2: best 580 mean 457 ever 580 sigma 0.179 elapsed 9m
+gen 3: best 577 mean 531 ever 580 sigma 0.183 elapsed 12m
+gen 4: best 604 mean 568 ever 604 sigma 0.184 elapsed 15m
+gen 5: best 614 mean 568 ever 614 sigma 0.180 elapsed 21m
