@@ -199,3 +199,40 @@ ARCHITECTURE SPEC (next session, highest priority):
 3. Opponent-window rhythm: pass excess (keep reserve for window-open dump — see
    passing v1 failure), end window full and near hub.
 4. Validate with move% (target 75%+ in collect windows) AND score.
+
+## THE 3x FIRE-RATE GAP — primary lead for next session (2026-11-25 final)
+
+Measured chain (all verified this session):
+- Bot 4414 fire uptime 0.305-0.313 ALREADY MATCHES pro 0.319. Uptime is not the gap.
+- PRO DRAIN RATE: sustained 30 balls/s (p50=mean=p90=30 — hard engine cap, 1 ball/2 engine ticks).
+- BOT DRAIN RATE: 4414 p50 10 mean 13.6; 254 p50 20 mean 23.8. Same robot, same continuous
+  score-press, parked at speed 0 — yet half-to-third the throughput. THIS IS THE SCORE GAP.
+- Bot's longest drain: 7.9s continuous press, parked, drains only 13.8/s. NO stutter — smooth
+  but slow. So not gate flapping; a continuous mechanical property.
+- Pros NEVER press hood/stow/climb/block (147k recovered samples) — no secret button.
+- Pro presses score 55% of ticks (bot 40%), intake only 41%.
+- AGENTS.md says "fire rate caps 4414 at 14" — PRO DATA CONTRADICTS (30/s achieved).
+  The 14/s figure was probably mismeasured from bot behavior!
+- Pro parks DEEP: mean |x| 6.7-7.3 in own windows vs bot score spot r≈3.5 from hub center.
+  HYPOTHESIS A: fire rate depends on shot distance/hood solution — close shots cycle faster.
+  HYPOTHESIS B: flywheel RPM dependent — spin-up state persists at higher RPM when continuously firing.
+  HYPOTHESIS C: pass vs hub shot selection — bot's spot triggers slower passShot table.
+  NOTE: close score spots r2.0/2.4 previously tested as regression (-90 to -230) BUT that was
+  measured in the old architecture with other bottlenecks dominating — retest with rate instrumentation!
+- NEXT SESSION: probe engine fire rate vs distance directly (park at r=1.5/2.5/3.5/5, measure drain).
+  Then check shot table logic in wasm extraction for rate-limit mechanism (reload time per shot type).
+
+## Lane sweep results (implemented, then defaulted OFF)
+- sweep_lane_m param: collect goals target lane EXIT beyond centroid (direction-committed
+  by velocity once passing through). Clamped to field margin, truncated at hub boxes.
+- BEHAVIORAL WIN: move% during collect 0.34-0.56 -> 0.75-0.84 (pro 0.73-0.90). Path length
+  156-208m = pro territory. Collection rate hit 7.3 balls/s (pro level) on 254-red.
+- BUT score regression -40 to -60 same-cell (4414: 690 base vs 628 sweep; 254: 666 vs 607).
+  Collection was never the binding constraint — fire throughput is. Sweep also lengthens
+  trips. KEPT OFF (sweep_lane_m=0) until fire-rate fix lands; then re-evaluate.
+- Fixed real bug regardless: unreachable exit points wedged robot 42s at (-7.16, 0) —
+  clamping/truncation is correct independent of sweep being on.
+- Pro fire pattern: fires EVERY 10s bin of match. Own windows deep |x|~7 (hub shots),
+  opponent windows midfield |x|2-4 (passes). Passes land own-half x in [-3.5,-1], 1.5-2.75m upfield.
+- Winner-vs-loser aggregate stats flat (cruise/positioning identical) — difference is
+  phase-dependent timing, per-window analysis still incomplete.

@@ -189,13 +189,54 @@ class Planner:
                       if all(math.dist(point, (dx, dz)) >= 1.0 for dx, dz, _ in self.collect_dead)]
         return sorted(result, reverse=True)
 
+    def sweep_goal(self, state, centroid):
+        # Lane-sweep primitive: the goal point is the lane EXIT beyond the
+        # cluster, so the robot drives through the pile at cruise instead of
+        # aiming at it and reversing on arrival. The centroid rides in
+        # goal.path so valid() can check the pile rather than the exit.
+        robot = state.robots[state.me]
+        cx, cz = centroid
+        dx, dz = cx - robot.x, cz - robot.z
+        dist = math.hypot(dx, dz)
+        speed = math.hypot(robot.vx, robot.vz)
+        # Direction commitment: once the robot is passing through or past the
+        # pile (centroid no longer clearly ahead of the velocity vector), the
+        # lane direction must come from the velocity itself — otherwise the
+        # robot->centroid bearing flips 180 deg mid-sweep and the regenerated
+        # lane points back the way we came.
+        ahead = dist > 1e-6 and speed > .8 and (dx * robot.vx + dz * robot.vz) / (dist * speed) > .3
+        if speed > .8 and not ahead:
+            ux, uz = robot.vx / speed, robot.vz / speed
+        elif dist > 1e-6:
+            ux, uz = dx / dist, dz / dist
+        else:
+            ux, uz = math.cos(robot.a), math.sin(robot.a)
+        lane = PARAMS["sweep_lane_m"]
+        # Truncate the lane where it would end inside a wall or hub structure —
+        # an unreachable exit wedges the robot against the geometry it cannot
+        # enter (observed: 42 s pinned at x=-7.16 chasing a point inside the hub).
+        margin = .45
+        ex, ez = cx + ux * lane, cz + uz * lane
+        for hx, hz, _ in HUB_CENTRES.values():
+            if abs(ex - hx) < 1.5 and abs(ez - hz) < 1.5:
+                # walk the lane back out of the hub box
+                for back in np.linspace(0, lane, 24):
+                    ex, ez = cx + ux * (lane - back), cz + uz * (lane - back)
+                    if not (abs(ex - hx) < 1.5 and abs(ez - hz) < 1.5):
+                        break
+                break
+        ex = max(-FIELD_X + margin, min(FIELD_X - margin, ex))
+        ez = max(-FIELD_Z + margin, min(FIELD_Z - margin, ez))
+        return Goal("Collect", (ex, ez), path=(cx, cz))
+
     def valid(self, goal, state):
         if goal is None:
             return False
         robot = state.robots[state.me]
         if goal.kind == "Collect":
             points = self.fuel_points(state)
-            return robot.hopper < self.capacity(state) and bool(len(points) and np.any(np.linalg.norm(points - goal.point, axis=1) < .85))
+            centre = goal.path if len(goal.path) == 2 else goal.point
+            return robot.hopper < self.capacity(state) and bool(len(points) and np.any(np.linalg.norm(points - centre, axis=1) < .85))
         if goal.kind == "Score":
             # With a live in-zone pile the Score goal should release once the
             # hopper drains to the floor so the planner can refill and cycle.
@@ -253,7 +294,7 @@ class Planner:
         elif not hub.active and robot.hopper and (robot.hopper >= PARAMS["stage_full_frac"] * self.capacity(state) or hub.seconds_to_toggle < score_time + PARAMS["arrive_margin_s"]):
             goal = Goal("Stage", spot)
         elif clusters:
-            goal = Goal("Collect", clusters[0][1])
+            goal = self.sweep_goal(state, clusters[0][1])
         else:
             goal = Goal("Stage", spot if robot.hopper else (robot.x, robot.z))
         if self.goal and self.goal.kind == "Stage" and robot.hopper and hub.active:
