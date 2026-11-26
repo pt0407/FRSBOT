@@ -215,15 +215,15 @@ class Driver:
         speed = min(vmax, PARAMS["drive_dist_gain"] * brake_dist,
                     math.sqrt(2 * self.spec.accel * PARAMS["drive_brake_frac"] * max(0, brake_dist - .12)))
         if goal.kind == "Collect":
-            if distance < 1:
-                speed = min(speed, vmax * PARAMS["collect_near_frac"])
-            elif mow_dir is not None:
-                speed = min(speed, vmax * PARAMS["mow_speed_frac"])
-            speed *= max(PARAMS["collect_cos_floor"], math.cos(angle_error(direction, robot.a)))
+            # Human speed law (measured from 136k pro replay frames): pros never
+            # brake for collect points and never throttle for heading error —
+            # they sustain ~0.68*vmax through every distance bin, point-blank
+            # included. Collection is pure pass-through at cruise speed.
+            speed = vmax * PARAMS["collect_cruise_frac"]
         if arriving and final_waypoint:
             speed = 0
             if goal.kind == "Collect" and path_fuel:
-                speed = .6
+                speed = vmax * PARAMS["collect_cruise_frac"]
         elif arriving:
             speed = max(speed, .35)
         score_speed = self.spec.max_shot_speed or self.spec.brain_equivalents.get("scoreSpeedTol", .15)

@@ -1,0 +1,28 @@
+/Users/pranav/Desktop/DevinProjects/FRSBOT/.venv/lib/python3.12/site-packages/cma/s.py:17: UserWarning: Could not import matplotlib.pyplot, therefore ``cma.plot()`` etc. is not available
+  _warnings.warn('Could not import matplotlib.pyplot, therefore'
+(6_w,12)-aCMA-ES (mu_w=3.7,w_1=40%) in dimension 17 (seed=737957, Wed Nov 25 19:36:03 2026)
+CMA-ES: 17 genes, popsize 12, teams [254, 4414, 1678]
+9 parallel slots
+gen 1: best 591 mean 480 ever 591 sigma 0.190 elapsed 5m
+gen 2: best 603 mean 520 ever 603 sigma 0.185 elapsed 9m
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/pranav/Desktop/DevinProjects/FRSBOT/frsbot/tools/evolve_params.py", line 141, in <module>
+    main()
+  File "/Users/pranav/Desktop/DevinProjects/FRSBOT/frsbot/tools/evolve_params.py", line 120, in main
+    fitness[i] = evaluate(env, x, args.teams, seed, slots)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pranav/Desktop/DevinProjects/FRSBOT/frsbot/tools/evolve_params.py", line 82, in evaluate
+    env.rollout(163.0, 3, matches=list(slots))
+  File "/Users/pranav/Desktop/DevinProjects/FRSBOT/frsbot/sim/vec_env.py", line 351, in rollout
+    for w, observed in self._gather("rollout", by_worker).items():
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pranav/Desktop/DevinProjects/FRSBOT/frsbot/sim/vec_env.py", line 302, in _gather
+    raise error
+  File "/Users/pranav/Desktop/DevinProjects/FRSBOT/frsbot/sim/vec_env.py", line 298, in _gather
+    results[w] = self.workers[w]._result()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pranav/Desktop/DevinProjects/FRSBOT/frsbot/sim/vec_env.py", line 209, in _result
+    raise value
+ValueError: min() iterable argument is empty

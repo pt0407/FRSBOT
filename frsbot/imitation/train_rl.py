@@ -111,7 +111,11 @@ def main():
             for k, j in enumerate(live):
                 r = results[j]
                 states[j] = r.views[r.ego]
-                total = r.breakdowns[alliance[j]]["total"]
+                # Reward must be robot-attributed: the alliance total includes
+                # HP human-player scoring, action-independent noise that swamps
+                # the policy gradient (measured: score drifted down over 18
+                # iterations while value loss rose).
+                total = float(r.observation.driver[r.ego]["scored"]) if r.observation and r.observation.driver else r.breakdowns[alliance[j]]["total"]
                 reward = total - prev_score[j]
                 prev_score[j] = total
                 end = r.done or r.t >= 163
@@ -150,7 +154,10 @@ def main():
         var = args.std ** 2
 
         def means(net_out, rule_xy):
-            return (args.blend * net_out[:, :2] + (1 - args.blend) * rule_xy).clamp(-1, 1)
+            # No clamp here: clamping the mean zeroes the gradient exactly where
+            # sticks saturate, and this domain lives at +-1. Actions are clipped
+            # only when sent to the engine.
+            return args.blend * net_out[:, :2] + (1 - args.blend) * rule_xy
         with torch.no_grad():
             logp_old = -((acts - means(policy(feats), rules)) ** 2).sum(-1) / (2 * var)
         pl_losses, vl_losses = [], []
@@ -170,7 +177,9 @@ def main():
                 pl_losses.append(pl.item()); vl_losses.append(vl.item())
         total_score = sum(prev_score) / n
         best_mean = max(best_mean, total_score)
-        if iteration % args.save_every == 0 or total_score >= best_mean:
+        if total_score >= best_mean:
+            # Only overwrite the production weights when the noisy rollout mean
+            # improves; a drifting run must never destroy the BC init.
             torch.save(policy.state_dict(), MODEL)
         print(f"iter {iteration}: mean score {total_score:.0f} best {best_mean:.0f} "
               f"rollout {time.time() - t0:.0f}s pl {np.mean(pl_losses):.4f} vl {np.mean(vl_losses):.2f} "

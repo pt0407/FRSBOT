@@ -41,6 +41,7 @@ GENES = [
     ("active_hub_bias", 0.0, 0.5),
     ("collect_stall_s", 0.5, 4.0),
     ("arrive_margin_s", -1.0, 2.0),
+    ("collect_cruise_frac", 0.3, 1.0),
 ]
 TEAMS = (254, 4414, 1678)
 
@@ -117,7 +118,11 @@ def main():
             wave, jobs = jobs[:slots_per_wave // len(args.teams)], jobs[slots_per_wave // len(args.teams):]
             for k, (i, x) in enumerate(wave):
                 slots = list(range(k * len(args.teams), (k + 1) * len(args.teams)))
-                fitness[i] = evaluate(env, x, args.teams, seed, slots)
+                try:
+                    fitness[i] = evaluate(env, x, args.teams, seed, slots)
+                except Exception as exc:
+                    print(f"  candidate {i} crashed ({exc}); fitness 0", flush=True)
+                    fitness[i] = 0.
         es.tell(xs, [-f for f in fitness])
         order = np.argsort(fitness)[::-1]
         top = fitness[order[0]]

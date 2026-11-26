@@ -104,6 +104,8 @@ class Planner:
             free = [p for p in candidates if all(math.dist(p, slot) >= PARAMS["avoid_slot_m"] for slot in self.avoid_slots)]
             if free:
                 candidates = free
+        if not candidates:
+            return preferred
         return min(candidates, key=lambda p: math.dist(p, preferred))
 
     def fuel_points(self, state):
