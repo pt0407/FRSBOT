@@ -1,0 +1,5 @@
+/Users/pranav/Desktop/DevinProjects/FRSBOT/.venv/lib/python3.12/site-packages/cma/s.py:17: UserWarning: Could not import matplotlib.pyplot, therefore ``cma.plot()`` etc. is not available
+  _warnings.warn('Could not import matplotlib.pyplot, therefore'
+(6_w,12)-aCMA-ES (mu_w=3.7,w_1=40%) in dimension 18 (seed=699213, Wed Nov 25 20:14:47 2026)
+CMA-ES: 18 genes, popsize 12, teams [254, 4414, 1678]
+12 parallel slots

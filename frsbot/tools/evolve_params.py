@@ -75,13 +75,22 @@ def normalise_defaults():
     return np.array([(DEFAULTS[name] - lo) / (hi - lo) for name, lo, hi in GENES])
 
 
-def evaluate(env, x, teams, seed, slots):
-    """Run one candidate as full solo matches in the given slots; mean alliance total."""
-    params = denormalise(x)
-    configs = [dict(robots=[RobotSlot(team=team, policy=ParamPolicy(team, params))], seed=seed) for team in teams]
-    env.reset(configs, matches=list(slots))
-    env.rollout(163.0, 3, matches=list(slots))
-    return sum(float(env.observations[slot].breakdowns["blue"]["total"]) for slot in slots) / len(slots)
+def evaluate_wave(env, wave, teams, seed):
+    """Run a wave of candidates truly in parallel: every candidate gets len(teams)
+    consecutive slots, all configured and rolled out together."""
+    configs, slots = [], []
+    for _, x in wave:
+        params = denormalise(x)
+        for team in teams:
+            configs.append(dict(robots=[RobotSlot(team=team, policy=ParamPolicy(team, params))], seed=seed))
+            slots.append(len(slots))
+    env.reset(configs, matches=slots)
+    env.rollout(163.0, 3, matches=slots)
+    fitness = []
+    for k in range(len(wave)):
+        mine = slots[k * len(teams):(k + 1) * len(teams)]
+        fitness.append(sum(float(env.observations[slot].breakdowns["blue"]["total"]) for slot in mine) / len(mine))
+    return fitness
 
 
 def main():
@@ -116,13 +125,12 @@ def main():
         jobs = [(i, x) for i, x in enumerate(xs)]
         while jobs:
             wave, jobs = jobs[:slots_per_wave // len(args.teams)], jobs[slots_per_wave // len(args.teams):]
-            for k, (i, x) in enumerate(wave):
-                slots = list(range(k * len(args.teams), (k + 1) * len(args.teams)))
-                try:
-                    fitness[i] = evaluate(env, x, args.teams, seed, slots)
-                except Exception as exc:
-                    print(f"  candidate {i} crashed ({exc}); fitness 0", flush=True)
-                    fitness[i] = 0.
+            try:
+                scores = evaluate_wave(env, wave, args.teams, seed)
+                for (i, _), f in zip(wave, scores):
+                    fitness[i] = f
+            except Exception as exc:
+                print(f"  wave crashed ({exc}); those candidates get fitness 0", flush=True)
         es.tell(xs, [-f for f in fitness])
         order = np.argsort(fitness)[::-1]
         top = fitness[order[0]]
