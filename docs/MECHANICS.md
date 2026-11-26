@@ -52,3 +52,16 @@ eval 254 ~691 / 1678 ~309 vs cruise-only ~700/282 — noise-level difference, ke
 as a param (default 1.0) for evolution to judge. Evolution (CMA-ES, 18 genes) at
 gen 5 best 614 ≈ baseline; runs in `data/rl/evolve_run2.log`, checkpoints in
 `data/rl/evolved_params.json`.
+
+## Trench capability findings (2026-11-25 late)
+
+- Driver treats trench posts as obstacles (x |3.048..4.242|, |z| 2.40-2.85) for
+  robots WITHOUT `spec.trench_cut`; the 0.565 m bar height is the fit constraint.
+- Extraction status: only 3/20 robots have trenchCut in `data/robot_feel.json`
+  (1323, 6329, 9785) and the engine spec file contains exactly 3 trenchCut defs —
+  so either most robots genuinely can't fold under, or capability is encoded in
+  raw geometry (height) rather than the trenchCut flag. NEEDS: per-robot height
+  extraction + empirical drive-through test per robot (`specs.py` has the fields).
+- NOT yet modeled: fullness-dependent fit (hopper expansion blocks trench when
+  full, per the driver). Pathing is currently binary per robot, load-blind.
+- driver.mjs already mirrors the trench-post obstacle logic.
