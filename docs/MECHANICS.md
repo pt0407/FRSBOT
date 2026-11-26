@@ -116,3 +116,15 @@ so window-open still has a partial dump), or only pass excess collected in
 the final seconds, or verify landing zones aren't wasteful first. ALSO:
 hopper-full timing — should arrive at window open FULL, pass only early-window
 excess. v1 kept in code but needs retune before adoption.
+
+## Methodology corrections (driver, 2026-11-25)
+
+- NEVER aggregate behavior stats across robot archetypes: xLock robots must park
+  to fire, moving-shot robots don't. Bin by team number.
+- NEVER aggregate ranked players as "pros": mixed skill pool. Use per-match
+  winner/high-scorer as the strong-player filter; winner-vs-loser comparison in
+  the SAME match is the cleanest signal for what decisions matter.
+- Priority order per driver: path FINDING (which balls, which order, which route,
+  window timing) over movement speed. Movement law is done; target/route selection
+  is the gap. Extraction target: do winners choose different targets/routes than
+  losers given the same field state?
