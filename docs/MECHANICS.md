@@ -128,3 +128,13 @@ excess. v1 kept in code but needs retune before adoption.
   window timing) over movement speed. Movement law is done; target/route selection
   is the gap. Extraction target: do winners choose different targets/routes than
   losers given the same field state?
+
+## Path-shape metrics (2026-11-25) — the arc gap, quantified
+
+`frsbot/analysis/pathshape.py` computes the observables. Pro reference
+(solo leaderboard): turn_rate ~0.06-0.08, reversal_rate ~0.0003, cruise 2.5-2.7,
+stop_frac 0.16-0.48. Bot (imai-4414 evals): turn_rate 0.13-0.17 (2.3x pro),
+reversals up to 10x, cruise 1.6-2.0, stop_frac 0.52-0.58. Root cause hypothesis:
+point-to-point retargeting every 0.5 s replan forces constant sharp corrections;
+pros commit to long arcs. These metrics are fitness-shaped — eval any trace
+against PRO_REFERENCE.
