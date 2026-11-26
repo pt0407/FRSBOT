@@ -10,7 +10,7 @@ DEFAULTS = dict(collect_frac=0.3, collect_min=10.0, replan_s=0.5, avoid_slot_m=1
                 stage_full_frac=0.95, arrive_margin_s=0.0, intake_needs_fuel=0,
                 learned_hint=0, hint_threshold=0.6,
                 cluster_bias=0.5,
-                collect_near_frac=0.6, collect_cos_floor=0.05, collect_cruise_frac=0.68, lane_bias=1.0,
+                collect_near_frac=0.6, collect_cos_floor=0.05, collect_cruise_frac=0.68, lane_bias=1.0, pass_frac=0.7,
                 trip_sequencing=0, trip_fill=0.85, trip_shift_aware=1,
                 sweep_min_m=0.6, sweep_scale=0.8, collect_arrive_m=0.3,
                 active_score_frac=0.85, use_total_capacity=0,

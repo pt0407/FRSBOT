@@ -55,7 +55,7 @@ export function viewToState(view, freeplay = false, me = null) {
 
 // Shipped tuning defaults used by Driver (frsbot/bot/tuning.py DEFAULTS subset).
 const PARAMS = { driveDistGain: 2.0, driveBrakeFrac: .4,
-  collectNearFrac: .6, collectCosFloor: .05, mowConeMin: 99, collectCruiseFrac: .68,
+  collectNearFrac: .6, collectCosFloor: .05, mowConeMin: 99, collectCruiseFrac: .68, passFrac: .7,
   mowSpeedFrac: .35, intakeNeedsFuel: 0, approachFire: 1, freeFire: 0, freeFireSpeed: .8,
   preFireS: 2.0, postFireS: .35, scoreRadiusFrac: .5 };
 
@@ -393,6 +393,11 @@ export class Driver {
       if (PARAMS.approachFire && !speedGated && shooting && inZone && low <= distanceHub && distanceHub <= high)
         score = score || distance < 1.6 || v <= scoreSpeed;
     }
+    // Inactive-window passing (parity with driver.py): full hopper + hub shut
+    // + out of range => brain auto-passes upfield.
+    if (!active && robot.hopper >= PARAMS.passFrac * planner.capacity(state)
+        && distanceHub > high + .5 && (goal.kind === 'Collect' || goal.kind === 'Stage' || goal.kind === 'Hold'))
+      score = true;
     let turn = inverseDeadzone(Math.max(-1, Math.min(1, -4 * angleError(aim, robot.a) / (.45 * spec.turn_rate))));
     // Mirrors driver.py: while score is pressed the engine brain sets
     // desiredRotation and t.turn is ignored — zeroed for clarity. Turret robots

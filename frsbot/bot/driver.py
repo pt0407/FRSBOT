@@ -308,6 +308,12 @@ class Driver:
             # the aim-translation slowdown for the whole leg.
             if PARAMS["approach_fire"] and not speed_gated and shooting and in_zone and low <= distance_hub <= high:
                 score = score or distance < 1.6 or math.hypot(robot.vx, robot.vz) <= score_speed
+        # Inactive-window passing: when the hub is shut a full hopper is dead
+        # capacity. Out of scoring range the brain auto-passes upfield — emptying
+        # the hopper keeps collection going and pre-positions fuel on our side.
+        if (not active and robot.hopper >= PARAMS["pass_frac"] * self.planner.capacity(state)
+                and distance_hub > high + .5 and goal.kind in ("Collect", "Stage", "Hold")):
+            score = True
         # Engine applies a 0.45 factor to the manual turn rate — divide it out so
         # the P-gain commands the intended omega and doesn't stall ~2.2x early.
         turn = inverse_deadzone(max(-1, min(1, -4 * angle_error(aim, robot.a) / (.45 * self.spec.turn_rate))))
