@@ -395,8 +395,9 @@ export class Driver {
     }
     // Inactive-window passing (parity with driver.py): full hopper + hub shut
     // + out of range => brain auto-passes upfield.
+    const hubT = state.hubs[robot.alliance]; const toggle = hubT.secondsToToggle ?? hubT.seconds_to_toggle ?? 99;
     if (!active && robot.hopper >= PARAMS.passFrac * planner.capacity(state)
-        && distanceHub > high + .5 && (goal.kind === 'Collect' || goal.kind === 'Stage' || goal.kind === 'Hold'))
+        && toggle > 8 && distanceHub > high + .5 && (goal.kind === 'Collect' || goal.kind === 'Stage' || goal.kind === 'Hold'))
       score = true;
     let turn = inverseDeadzone(Math.max(-1, Math.min(1, -4 * angleError(aim, robot.a) / (.45 * spec.turn_rate))));
     // Mirrors driver.py: while score is pressed the engine brain sets

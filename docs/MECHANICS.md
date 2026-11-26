@@ -275,3 +275,14 @@ THE GAP IS TIME SPENT FIRING, not rate. Pros press score 55% of all ticks (147k 
   throws and/or teammate passing — not replicated in solo bot play. loose ring stays default.
 - OPEN: verify where HP throws land (decode fuel spawn positions by where-code over time).
   If they land deep, positioning to intercept could unlock the deep-zone strategy properly.
+
+## Pass loosening tested negative (2026-11-26)
+- pass_frac 0.35 + toggle>8 protection: 4414 692 (vs 707 fire_sweep alone), 254 636 (vs 666
+  baseline) — neutral-to-negative, reverted to 0.7. The toggle>8 window-end protection KEPT
+  (strictly more correct, no cost). Passing during opponent windows remains uncracked:
+  passes may feed the opponent or land where re-collection costs more than the pass gains.
+- PRE-EXISTING BREAKAGE: test_js_driver_matches_python_on_recorded_engine_states fails on
+  parent commit too (axis error 1.147) — fixture/driver drift from an earlier session,
+  unrelated to fire_sweep/pass edits. Needs a fixture re-record or bisect next session.
+- CURRENT SCOREBOARD (seeds 1-2): baseline 4414 690/254 666/1678 273;
+  fire_sweep=1 (SHIPPED, default on): 4414 707 best 767.

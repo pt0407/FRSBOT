@@ -329,8 +329,12 @@ class Driver:
         # Inactive-window passing: when the hub is shut a full hopper is dead
         # capacity. Out of scoring range the brain auto-passes upfield — emptying
         # the hopper keeps collection going and pre-positions fuel on our side.
+        # Pro passing is continuous at any moderate hopper level — but never in the
+        # last seconds before the window opens: arriving full for the active window
+        # matters more than one more pass (v1 regression mechanism).
+        toggle = state.hubs[robot.alliance].seconds_to_toggle
         if (not active and robot.hopper >= PARAMS["pass_frac"] * self.planner.capacity(state)
-                and distance_hub > high + .5 and goal.kind in ("Collect", "Stage", "Hold")):
+                and toggle > 8 and distance_hub > high + .5 and goal.kind in ("Collect", "Stage", "Hold")):
             score = True
         # Engine applies a 0.45 factor to the manual turn rate — divide it out so
         # the P-gain commands the intended omega and doesn't stall ~2.2x early.
