@@ -36,6 +36,8 @@ class Driver:
         self.progress_at = None
         self.open_since = None
         self.previous_hopper = None
+        self.swoop_dir = None
+        self.swoop_target = None
         self.recovery_stage = 0
         self.recovery_point = None
         self.wiggle_until = 0
@@ -182,6 +184,19 @@ class Driver:
         dx, dz = point[0] - robot.x, point[1] - robot.z
         distance = math.hypot(dx, dz)
         direction = math.atan2(dz, dx)
+        # Lane commitment (pro path shape): steering AT a pile whips the bearing
+        # around as you pass it — the zigzag in pathshape metrics. Inside swoop_m,
+        # freeze the heading of travel and drive straight through the lane instead.
+        if self.swoop_target is None or math.dist(self.swoop_target, target) > .5:
+            self.swoop_dir = None
+            self.swoop_target = target
+        if goal.kind == "Collect" and distance < PARAMS["swoop_m"]:
+            if self.swoop_dir is None and math.hypot(robot.vx, robot.vz) > 1.0:
+                self.swoop_dir = math.atan2(robot.vz, robot.vx)
+            if self.swoop_dir is not None:
+                direction = self.swoop_dir
+        else:
+            self.swoop_dir = None
         points = self.planner.fuel_points(state)
         path_fuel = False
         mow_dir = None

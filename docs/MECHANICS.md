@@ -138,3 +138,16 @@ reversals up to 10x, cruise 1.6-2.0, stop_frac 0.52-0.58. Root cause hypothesis:
 point-to-point retargeting every 0.5 s replan forces constant sharp corrections;
 pros commit to long arcs. These metrics are fitness-shaped — eval any trace
 against PRO_REFERENCE.
+
+## CORRECTED path-shape analysis (units-fixed, dt-invariant)
+
+The earlier "bot curves 2.3x sharper" was a sampling-rate artifact (30hz pro vs
+10hz bot traces). With dt-invariant metrics: curvature/m pro 0.58-0.84 vs bot
+0.82-0.84 (SAME); accel smoothness pro 2.8-5.2 vs bot 2.8-2.9 (SAME); speed cv
+pro 0.34-0.58 vs bot 0.37 (SAME); reversals ~4/match (rare). Real residual
+gaps: cruise 1.9-2.0 vs 2.5ish and frac-time-slow 60-65% vs 43-53%.
+CONCLUSION: micro-kinematics are within pro range — the visual difference is
+semantic (wrong places, wrong targets, dead time), not mechanical. Movement
+polish is a dead end; 100% of remaining gap is decision-making: target/route
+selection, window timing, passing. Swoop experiment (direction lock near piles)
+showed no measurable benefit — left in code behind swoop_m param, unvalidated.
